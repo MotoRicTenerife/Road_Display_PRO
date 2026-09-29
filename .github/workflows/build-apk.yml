@@ -1,3 +1,4 @@
+
 name: Build ROAD DISPLAY PRO APK
 
 on:
@@ -15,10 +16,10 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Extract ROAD DISPLAY PRO project
+      - name: Extract project
         run: |
           unzip -o Road_Display_PRO_3.0.0.zip
-          echo "Project extracted"
+          ls -la
           ls -la Road_Display_PRO
 
       - name: Setup Java 17
@@ -27,17 +28,18 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: |
+            platform-tools
+            platforms;android-35
+            build-tools;35.0.0
+
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.7'
-
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Install Android SDK components
-        run: |
-          sdkmanager "platforms;android-35" "build-tools;35.0.0"
 
       - name: Build APK
         working-directory: Road_Display_PRO
