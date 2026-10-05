@@ -16,11 +16,41 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Extract project
+      - name: Verify ZIP
+        shell: bash
         run: |
-          unzip -o Road_Display_PRO_3.0.0.zip
-          ls -la
-          ls -la Road_Display_PRO
+          set -e
+
+          echo "Repository contents:"
+          ls -lah
+
+          test -f "Road_Display_PRO_3.0.0.zip"
+
+          echo "ZIP found:"
+          ls -lh "Road_Display_PRO_3.0.0.zip"
+
+      - name: Extract project
+        shell: bash
+        run: |
+          set -e
+
+          rm -rf Road_Display_PRO
+
+          unzip -o "Road_Display_PRO_3.0.0.zip"
+
+          echo "Extracted contents:"
+          ls -lah
+
+          test -d "Road_Display_PRO"
+          test -f "Road_Display_PRO/settings.gradle"
+
+          echo "Android project found."
+
+      - name: Show Android project
+        shell: bash
+        run: |
+          echo "Project structure:"
+          find Road_Display_PRO -maxdepth 3 -type f | sort | head -250
 
       - name: Setup Java 17
         uses: actions/setup-java@v4
@@ -28,24 +58,47 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-   
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
-        with:
-          packages: 'platform-tools platforms;android-35 build-tools;35.0.0'
 
+      - name: Install Android SDK packages
+        run: |
+          sdkmanager \
+            "platform-tools" \
+            "platforms;android-35" \
+            "build-tools;35.0.0"
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.7'
 
-      - name: Build APK
+      - name: Verify Gradle project
         working-directory: Road_Display_PRO
-        run: gradle assembleDebug
+        run: |
+          test -f settings.gradle
+          test -f build.gradle
+          test -f app/build.gradle
+          echo "Gradle project structure OK."
+
+      - name: Build Debug APK
+        working-directory: Road_Display_PRO
+        run: |
+          gradle assembleDebug --stacktrace
+
+      - name: Verify APK
+        shell: bash
+        run: |
+          APK="Road_Display_PRO/app/build/outputs/apk/debug/app-debug.apk"
+
+          test -f "$APK"
+
+          echo "APK successfully generated:"
+          ls -lh "$APK"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: road-display-pro-3.0.0-debug
           path: Road_Display_PRO/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
