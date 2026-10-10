@@ -18,6 +18,13 @@ import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.TextView;
+import android.widget.FrameLayout;
+
+import org.osmdroid.config.Configuration;
+import org.osmdroid.tileprovider.tilesource.TileSourceFactory;
+import org.osmdroid.util.GeoPoint;
+import org.osmdroid.views.MapView;
+import org.osmdroid.views.overlay.Marker;
 import android.content.Context;
 
 import java.util.Locale;
@@ -30,7 +37,10 @@ public class MainActivity extends Activity {
     private TextView positionView;
     private boolean locationUpdatesActive = false;
     private TextView speedView;
-    private RideView rideView;
+    private MapView mapView;
+    private Marker currentMarker;
+    private boolean mapCenteredOnFix = false;
+    private TextView mapStatusView;
     private boolean demo = false;
     private float demoSpeed = 54f;
     private Location latestLocation;
@@ -55,6 +65,8 @@ public class MainActivity extends Activity {
             View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN |
             View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION);
         locationManager = (LocationManager) getSystemService(LOCATION_SERVICE);
+        Configuration.getInstance().load(this, getSharedPreferences("osmdroid", MODE_PRIVATE));
+        Configuration.getInstance().setUserAgentValue(getPackageName());
         buildUi();
         if (!hasLocationPermission()) requestPermissions(
             new String[]{Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION},
@@ -82,8 +94,18 @@ public class MainActivity extends Activity {
         root.addView(accuracyView, new LinearLayout.LayoutParams(-1, dp(25)));
         root.addView(positionView, new LinearLayout.LayoutParams(-1, dp(24)));
 
-        rideView = new RideView(this);
-        root.addView(rideView, new LinearLayout.LayoutParams(-1, 0, 1f));
+        FrameLayout mapFrame = new FrameLayout(this);
+        mapView = new MapView(this);
+        mapView.setTileSource(TileSourceFactory.MAPNIK);
+        mapView.setMultiTouchControls(true);
+        mapView.getController().setZoom(10.0);
+        mapView.getController().setCenter(new GeoPoint(28.1, -16.7));
+        mapFrame.addView(mapView, new FrameLayout.LayoutParams(-1, -1));
+        root.addView(mapFrame, new LinearLayout.LayoutParams(-1, 0, 1f));
+
+        mapStatusView = makeLabel("MAPPA ONLINE OSM  •  PERCORSO NON CALCOLATO", 0xFFFFD740, 12);
+        mapStatusView.setGravity(Gravity.CENTER);
+        root.addView(mapStatusView, new LinearLayout.LayoutParams(-1, dp(26)));
 
         speedView = makeLabel("--", 0xFFFFFFFF, 68);
         speedView.setTypeface(Typeface.create("sans-serif-condensed", Typeface.BOLD));
@@ -105,7 +127,7 @@ public class MainActivity extends Activity {
                 statusView.setTextColor(0xFFFFFF00);
                 speedView.setText(String.format(Locale.ITALY, "%.0f", demoSpeed));
             } else updateLocationUi();
-            rideView.invalidate();
+            if (mapStatusView != null) mapStatusView.setText(demo ? "DEMO ATTIVA  •  POSIZIONE SIMULATA NON MOSTRATA" : "MAPPA ONLINE OSM  •  PERCORSO NON CALCOLATO");
         });
         buttons.addView(demoButton, new LinearLayout.LayoutParams(-2, dp(48)));
         root.addView(buttons, new LinearLayout.LayoutParams(-1, dp(54)));
@@ -198,7 +220,22 @@ public class MainActivity extends Activity {
         if (LocationFixQuality.mayDisplaySpeed(true, latestLocation.getTime(), now, latestLocation.hasSpeed())) {
             speedView.setText(String.format(Locale.ITALY, "%.0f", LocationFixQuality.speedKmh(latestLocation)));
         } else speedView.setText("--");
-        if (rideView != null) rideView.invalidate();
+        if (mapView != null) {
+            GeoPoint point = new GeoPoint(latestLocation.getLatitude(), latestLocation.getLongitude());
+            if (currentMarker == null) {
+                currentMarker = new Marker(mapView);
+                currentMarker.setTitle("Posizione GPS");
+                currentMarker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM);
+                mapView.getOverlays().add(currentMarker);
+            }
+            currentMarker.setPosition(point);
+            if (!mapCenteredOnFix) {
+                mapView.getController().animateTo(point);
+                mapCenteredOnFix = true;
+                mapView.getController().setZoom(16.0);
+            }
+            mapView.invalidate();
+        }
     }
 
     @Override public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
@@ -211,6 +248,7 @@ public class MainActivity extends Activity {
 
     @Override protected void onResume() {
         super.onResume();
+        if (mapView != null) mapView.onResume();
         if (locationManager != null && hasLocationPermission()) startLocation();
     }
 
@@ -219,32 +257,8 @@ public class MainActivity extends Activity {
             try { locationManager.removeUpdates(listener); } catch (SecurityException ignored) {}
             locationUpdatesActive = false;
         }
+        if (mapView != null) mapView.onPause();
         super.onPause();
     }
 
-    private final class RideView extends View {
-        private final Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
-        RideView(Context context) { super(context); setLayerType(View.LAYER_TYPE_SOFTWARE, null); }
-        @Override protected void onDraw(Canvas c) {
-            super.onDraw(c);
-            float w = getWidth(), h = getHeight();
-            p.setColor(0xFF111111); p.setStyle(Paint.Style.FILL);
-            c.drawRoundRect(dp(8), dp(12), w-dp(8), h-dp(12), dp(18), dp(18), p);
-            p.setColor(0xFF333333); p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(dp(1));
-            c.drawRoundRect(dp(8), dp(12), w-dp(8), h-dp(12), dp(18), dp(18), p);
-            p.setStyle(Paint.Style.FILL); p.setTextAlign(Paint.Align.CENTER);
-            p.setTypeface(Typeface.DEFAULT_BOLD); p.setTextSize(dp(17));
-            p.setColor(0xFFFFFF00);
-            c.drawText(demo ? "DEMO — ANTEPRIMA" : "RIDE — STRADA DAVANTI", w/2, dp(46), p);
-            p.setTextSize(dp(15)); p.setColor(0xFFEEEEEE);
-            c.drawText(demo ? "CURVA MEDIA (SIMULATA)" : "NESSUNA GEOMETRIA STRADALE", w/2, dp(80), p);
-            float cx=w/2, cy=h*0.48f;
-            p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(dp(3)); p.setColor(0xFF555555);
-            Path path = new Path();
-            path.moveTo(cx-dp(32), cy+dp(76)); path.cubicTo(cx-dp(28), cy+dp(24), cx+dp(30), cy+dp(12), cx+dp(32), cy-dp(60));
-            c.drawPath(path,p);
-            p.setStyle(Paint.Style.FILL); p.setColor(0xFFFFD740); p.setTextSize(dp(13));
-            c.drawText(demo ? "ESEMPIO NON REALE" : "DATI STRADALI NON DISPONIBILI", cx, h-dp(35), p);
-        }
-    }
 }
