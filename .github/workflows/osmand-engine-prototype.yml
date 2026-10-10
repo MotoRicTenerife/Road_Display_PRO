@@ -76,7 +76,11 @@ jobs:
           set -euo pipefail
           # OsmAnd-java expects the resources checkout at ../resources.
           ln -sfn "$GITHUB_WORKSPACE/upstream/resources" "$GITHUB_WORKSPACE/resources"
-          gradle :OsmAnd-java:androidJar --no-daemon --stacktrace
+          # The upstream shared Kotlin module exceeded the runner's default daemon heap.
+          # Give Gradle/Kotlin explicit heaps and limit workers to avoid concurrent compiler OOM.
+          gradle :OsmAnd-java:androidJar --no-daemon --stacktrace --max-workers=2 \
+            -Dorg.gradle.jvmargs='-Xmx3g -Xms512m -XX:MaxMetaspaceSize=1g -XX:+HeapDumpOnOutOfMemoryError' \
+            -Pkotlin.daemon.jvmargs='-Xmx3g -Xms512m'
 
       - name: Upload upstream routing build outputs for inspection
         if: success()
