@@ -301,6 +301,8 @@ for test_path in (PROJECT / "roadtools").glob("*_test.py"):
     test_text = test_text.replace("version is 3.42.0", "version is 3.45.0")
     test_text = test_text.replace("version 3.42.0", "version 3.45.0")
     test_text = test_text.replace("'return best == null || bestScore > 55.0 ? 0 : bestLimit;' in engine,", "'if (best != null && bestScore <= 55.0)' in engine and 'return limit;' in engine,")
+    test_text = test_text.replace("'snap restricted to accurate fixes': 'location.getAccuracy() <= 20f' in main,", "'road snap accepts moderate but usable fixes': 'location.getAccuracy() <= 65f' in main,")
+    test_text = test_text.replace("'oneway heading filter exists': '\"yes\".equalsIgnoreCase(way.oneway)' in engine,", "'heading-aware road snap exists': 'score += delta * 0.22;' in engine and 'matchedWayId.equals(way.id)' in engine,")
     test_text = test_text.replace("'matchedLocation.distanceTo(l) <= 150.0f' in s", "'matchedLocation.distanceTo(l) > 100.0f' in s")
     test_text = test_text.replace("'System.currentTimeMillis()-matchedAt < 30000L' in s", "'System.currentTimeMillis() - matchedAt >= 20000L' in s")
     test_text = test_text.replace('needle = "if (ways == null || ways.isEmpty()) return 0;"', 'needle = "return cachedNetworkSpeedLimit(l);"')
@@ -314,8 +316,9 @@ s = p.read_text(encoding="utf-8")
 method = s[s.index("int speedLimitKmh(Location l)"):s.index("double distanceToSegmentMeters")]
 assert "RoadWay best = null;" in method
 assert "best = way;" in method
-assert "A geometrically matched road with no usable limit means" in method
+assert "best.id != null && best.id.equals(matchedWayId)" in method
 assert "return cachedNetworkSpeedLimit(l);" in method
+assert "Never borrow a limit from a different neighbouring way." in method
 cache = s[s.index("int cachedNetworkSpeedLimit(Location l)"):s.index("double distanceToSegmentMeters")]
 assert "matchedLocation.distanceTo(l) > 100.0f" in cache
 assert "System.currentTimeMillis() - matchedAt >= 20000L" in cache
@@ -344,7 +347,7 @@ checks = {
     "speeding warning requires five continuous seconds": "nowMs - speedLimitOverSinceMs >= 5000L" in MAIN,
     "repeat warning is rate limited to 120 seconds": "nowMs - lastSpeedLimitWarningAt >= 120000L" in MAIN,
     "repeat timer resets after 30 seconds at legal speed": "nowMs - speedLimitBelowSinceMs >= 30000L" in MAIN,
-    "unknown local road limit does not borrow a neighbouring or cached limit": "A geometrically matched road with no usable limit" in ENGINE and "return limit;" in ENGINE,
+    "cached edge limit is accepted only for the same matched OSM way": "best.id.equals(matchedWayId)" in ENGINE and "return cachedNetworkSpeedLimit(l);" in ENGINE,
     "version is 3.45.0": "versionCode 543; versionName '3.45.0'" in BUILD,
 }
 for name, passed in checks.items():
