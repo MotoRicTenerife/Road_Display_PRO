@@ -36,9 +36,9 @@ jobs:
         working-directory: Road_Display_PRO
         run: |
           set -euo pipefail
-          test "$(tr -d '\r\n' < BUILD_VERSION.txt)" = "3.42.0"
+          test "$(tr -d '\r\n' < BUILD_VERSION.txt)" = "3.43.0"
           grep -Fq "applicationId 'com.riccardo.roaddisplay'" app/build.gradle
-          grep -Fq "versionName '3.42.0'" app/build.gradle
+          grep -Fq "versionName '3.43.0'" app/build.gradle
           echo "Verified application baseline: $(cat BUILD_VERSION.txt)"
           test -d roadtools
           test -f roadtools/navigation_voice_speed_map_regression_test.py
@@ -100,5 +100,5 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: next-navi-pro-online-navigation-3.42.0-debug
+          name: next-navi-pro-speed-limits-3.43.0-debug
           path: Road_Display_PRO/app/build/outputs/apk/debug/app-debug.apk
