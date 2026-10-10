@@ -350,7 +350,7 @@ checks = {
     "cached edge limit is accepted only for the same matched OSM way": "best.id.equals(matchedWayId)" in ENGINE and "return cachedNetworkSpeedLimit(l);" in ENGINE,
     "fallback network callbacks cannot erase a recent GNSS limit": "nowMs - lastUsableGpsAt <= GNSS_LOSS_TIMEOUT_MS) return;" in MAIN,
     "Fused Location callbacks are explicitly trusted as fused": "processLocation(l, true)" in MAIN and "fromFusedCallback || \"fused\".equals(provider)" in MAIN,
-    "moderate usable GNSS refreshes roads before limit lookup": "engine.update(l);\n                currentSpeedLimitKmh = engine.speedLimitKmh(l);" in MAIN,
+    "moderate usable GNSS refreshes roads before limit lookup": "engine.update(l);\\n                currentSpeedLimitKmh = engine.speedLimitKmh(l);" in MAIN,
     "GPS holdover does not expire after a single brief gap": "GNSS_LOSS_TIMEOUT_MS = 40000L" in MAIN,
     "version is 3.45.0": "versionCode 543; versionName '3.45.0'" in BUILD,
 }
