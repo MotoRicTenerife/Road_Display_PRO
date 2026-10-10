@@ -83,6 +83,23 @@ new_smoothing = """                    float targetGap=sm.distanceTo(tg);
                         smoothMarkerBearing=normalizeBearing((float)(smoothMarkerBearing+bd*bearingAlpha));
                     }"""
 main = replace_once(main, old_smoothing, new_smoothing, "time-based marker smoothing")
+# Animate between 1 Hz GNSS samples: render-only short dead reckoning, never used for road/safety decisions.
+main = replace_once(
+    main,
+    "double targetMarkerLat=location.getLatitude(),targetMarkerLon=location.getLongitude(); float targetMarkerBearing=!Float.isNaN(navigationMatchedBearing)?navigationMatchedBearing:(hasMapBearing?mapBearing:0f);",
+    """double targetMarkerLat=location.getLatitude(),targetMarkerLon=location.getLongitude(); float targetMarkerBearing=!Float.isNaN(navigationMatchedBearing)?navigationMatchedBearing:(hasMapBearing?mapBearing:0f);
+                if(location.hasSpeed() && location.hasBearing() && location.getSpeed() > 1.5f) {
+                    long fixAgeMs = Math.max(0L, System.currentTimeMillis() - location.getTime());
+                    double predictSeconds = Math.min(0.55, fixAgeMs / 1000.0);
+                    double distanceAhead = location.getSpeed() * predictSeconds;
+                    double bearingRad = Math.toRadians(location.getBearing());
+                    double cosLat = Math.max(0.15, Math.cos(Math.toRadians(location.getLatitude())));
+                    targetMarkerLat += distanceAhead * Math.cos(bearingRad) / 111320.0;
+                    targetMarkerLon += distanceAhead * Math.sin(bearingRad) / (111320.0 * cosLat);
+                }""",
+    "smooth marker short-horizon motion prediction",
+)
+main = main.replace("postInvalidateDelayed(50); // Smooth navigation marker while active.", "postInvalidateDelayed(33); // Keep the marker animation near 30 fps while active.")
 MAIN.write_text(main, encoding="utf-8")
 # Improve speed-limit alert timing to avoid transient GPS-speed spikes and alert spam.
 old_fields = """    volatile int currentSpeedLimitKmh = 0;
@@ -144,7 +161,9 @@ test = replace_once(
     "    'high-speed marker smoothing is more responsive': 'location.getSpeed()>18f?0.72:0.55' in main,",
     "    'marker smoothing uses elapsed frame time': 'smoothMarkerLastFrameAt' in main and 'SystemClock.elapsedRealtime()' in main,\n"
     "    'marker smoothing is frame-rate independent': '1.0-Math.exp(-markerDt/(motorwaySpeed?0.12:0.20))' in main,\n"
-    "    'bearing smoothing uses a time constant': 'bearingAlpha=1.0-Math.exp(-markerDt/(motorwaySpeed?0.10:0.18))' in main,",
+    "    'bearing smoothing uses a time constant': 'bearingAlpha=1.0-Math.exp(-markerDt/(motorwaySpeed?0.10:0.18))' in main,
+    'marker predicts only a short horizon between GPS samples': 'Math.min(0.55, fixAgeMs / 1000.0)' in main and 'distanceAhead = location.getSpeed() * predictSeconds' in main,
+    'active map animation refreshes near 30 fps': 'postInvalidateDelayed(33); // Keep the marker animation near 30 fps while active.' in main,",
     "marker smoothing regression assertions",
 )
 SMOOTH_TEST.write_text(test, encoding="utf-8")
