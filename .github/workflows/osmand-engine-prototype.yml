@@ -8,6 +8,7 @@ on:
   pull_request:
     branches:
       - 'next-navi-pro/osmand-engine-prototype'
+      - 'next-navi-pro/osmand-engine-integration'
 
 permissions:
   contents: read
