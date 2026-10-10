@@ -188,10 +188,15 @@ engine = ENGINE.read_text(encoding="utf-8")
 # asynchronously, with bounded retry/movement cadence, never on the UI thread.
 engine = replace_once(
     engine,
+    "    Location loc;",
+    "    volatile Location loc;",
+    "publish latest location safely to background road loader",
+)
+engine = replace_once(
+    engine,
     "    volatile boolean crossCheckInFlight = false;",
     "    volatile boolean crossCheckInFlight = false;\n"
     "    volatile boolean roadFetchInFlight = false;\n"
-    "    volatile Location loc;\n"
     "    Location lastRoadFetchLocation;\n"
     "    long lastRoadFetchAt = 0L;",
     "online OSM road-fetch state",
