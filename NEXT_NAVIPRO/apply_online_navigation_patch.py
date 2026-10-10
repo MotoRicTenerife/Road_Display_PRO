@@ -259,19 +259,19 @@ MATCHER.write_text(matcher, encoding="utf-8")
 # Keep every existing regression assertion aligned with the new app version.
 for test_path in (PROJECT / "roadtools").glob("*_test.py"):
     test_text = test_path.read_text(encoding="utf-8")
-    test_text = test_text.replace("versionCode 539; versionName '3.41.9'", "versionCode 541; versionName '3.43.0'")
-    test_text = test_text.replace("versionCode 540; versionName '3.42.0'", "versionCode 541; versionName '3.43.0'")
-    test_text = test_text.replace("versionName '3.41.9'", "versionName '3.43.0'")
-    test_text = test_text.replace("versionName '3.42.0'", "versionName '3.43.0'")
-    test_text = test_text.replace("version is 3.42.0", "version is 3.43.0")
-    test_text = test_text.replace("version 3.42.0", "version 3.43.0")
+    test_text = test_text.replace("versionCode 539; versionName '3.41.9'", "versionCode 542; versionName '3.44.0'")
+    test_text = test_text.replace("versionCode 540; versionName '3.42.0'", "versionCode 542; versionName '3.44.0'")
+    test_text = test_text.replace("versionName '3.41.9'", "versionName '3.44.0'")
+    test_text = test_text.replace("versionName '3.42.0'", "versionName '3.44.0'")
+    test_text = test_text.replace("version is 3.42.0", "version is 3.44.0")
+    test_text = test_text.replace("version 3.42.0", "version 3.44.0")
     test_text = test_text.replace("'return best == null || bestScore > 55.0 ? 0 : bestLimit;' in engine,", "'if (best != null && bestScore <= 55.0)' in engine and 'return limit;' in engine,")
     test_text = test_text.replace("'matchedLocation.distanceTo(l) <= 150.0f' in s", "'matchedLocation.distanceTo(l) > 100.0f' in s")
     test_text = test_text.replace("'System.currentTimeMillis()-matchedAt < 30000L' in s", "'System.currentTimeMillis() - matchedAt >= 20000L' in s")
     test_text = test_text.replace('needle = "if (ways == null || ways.isEmpty()) return 0;"', 'needle = "return cachedNetworkSpeedLimit(l);"')
     test_path.write_text(test_text, encoding="utf-8")
 
-BUILD_VERSION.write_text("3.43.0\n", encoding="utf-8")
+BUILD_VERSION.write_text("3.44.0\n", encoding="utf-8")
 ride_test = PROJECT / "roadtools/speed_limit_ride_regression_test.py"
 ride_test.write_text('''from pathlib import Path
 p = Path(__file__).resolve().parents[0] / "../app/src/main/java/com/riccardo/roaddisplay/RoadEngine.java"
@@ -289,8 +289,8 @@ print("speed-limit RIDE regression: PASS")
 ''', encoding="utf-8")
 
 gradle = GRADLE.read_text(encoding="utf-8")
-gradle = replace_once(gradle, "versionCode 539", "versionCode 541", "Android version code")
-gradle = replace_once(gradle, "versionName '3.41.9'", "versionName '3.43.0'", "Android version name")
+gradle = replace_once(gradle, "versionCode 539", "versionCode 542", "Android version code")
+gradle = replace_once(gradle, "versionName '3.41.9'", "versionName '3.44.0'", "Android version name")
 GRADLE.write_text(gradle, encoding="utf-8")
 
 speed_test = PROJECT / "roadtools/speed_limit_handling_regression_test.py"
@@ -310,7 +310,7 @@ checks = {
     "repeat warning is rate limited to 120 seconds": "nowMs - lastSpeedLimitWarningAt >= 120000L" in MAIN,
     "repeat timer resets after 30 seconds at legal speed": "nowMs - speedLimitBelowSinceMs >= 30000L" in MAIN,
     "unknown local road limit does not borrow a neighbouring or cached limit": "A geometrically matched road with no usable limit" in ENGINE and "return limit;" in ENGINE,
-    "version is 3.43.0": "versionCode 541; versionName '3.43.0'" in BUILD,
+    "version is 3.44.0": "versionCode 542; versionName '3.44.0'" in BUILD,
 }
 for name, passed in checks.items():
     print(("PASS " if passed else "FAIL ") + name)
@@ -342,5 +342,5 @@ print("Poor-accuracy fixes are down-weighted; high-accuracy confidence is preser
 ''', encoding="utf-8")
 
 print("ONLINE_NAV_PATCH=PASS")
-print("VERSION=3.43.0")
+print("VERSION=3.44.0")
 print("CHANGED=frame-rate-independent marker smoothing; GNSS-aware map matching; speed-limit freshness and anti-spam warnings")
