@@ -1,6 +1,7 @@
 package com.riccardo.roaddisplay;
 
 import android.Manifest;
+import android.animation.ValueAnimator;
 import android.app.Activity;
 import android.content.pm.PackageManager;
 import android.graphics.Canvas;
@@ -39,6 +40,7 @@ public class MainActivity extends Activity {
     private TextView speedView;
     private MapView mapView;
     private Marker currentMarker;
+    private ValueAnimator markerAnimator;
     private boolean mapCenteredOnFix = false;
     private TextView mapStatusView;
     private boolean demo = false;
@@ -228,11 +230,25 @@ public class MainActivity extends Activity {
                 currentMarker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM);
                 mapView.getOverlays().add(currentMarker);
             }
-            currentMarker.setPosition(point);
-            if (!mapCenteredOnFix) {
+            GeoPoint previous = currentMarker.getPosition();
+            if (markerAnimator != null) markerAnimator.cancel();
+            if (previous == null || !mapCenteredOnFix) {
+                currentMarker.setPosition(point);
+                mapView.getController().setZoom(16.0);
                 mapView.getController().animateTo(point);
                 mapCenteredOnFix = true;
-                mapView.getController().setZoom(16.0);
+            } else {
+                markerAnimator = ValueAnimator.ofFloat(0f, 1f);
+                markerAnimator.setDuration(800L);
+                markerAnimator.addUpdateListener(animation -> {
+                    float fraction = (float) animation.getAnimatedValue();
+                    double lat = previous.getLatitude() + (point.getLatitude() - previous.getLatitude()) * fraction;
+                    double lon = previous.getLongitude() + (point.getLongitude() - previous.getLongitude()) * fraction;
+                    currentMarker.setPosition(new GeoPoint(lat, lon));
+                    mapView.invalidate();
+                });
+                markerAnimator.start();
+                if (!mapView.getBoundingBox().contains(point)) mapView.getController().animateTo(point);
             }
             mapView.invalidate();
         }
