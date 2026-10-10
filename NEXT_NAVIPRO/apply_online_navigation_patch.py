@@ -25,6 +25,32 @@ def replace_once(text: str, old: str, new: str, label: str) -> str:
     return text.replace(old, new, 1)
 
 main = MAIN.read_text(encoding="utf-8")
+# Keep valid-but-moderate GNSS fixes alive longer; never treat one weak sample as an immediate outage.
+main = replace_once(
+    main,
+    "    static final float GNSS_USABLE_ACCURACY_M = 100f;\n    static final long GNSS_STRONG_MAX_AGE_MS = 3500L;\n    static final long GNSS_USABLE_MAX_AGE_MS = 10000L;\n    static final long GNSS_LOSS_TIMEOUT_MS = 15000L;",
+    "    static final float GNSS_USABLE_ACCURACY_M = 120f;\n    static final long GNSS_STRONG_MAX_AGE_MS = 5000L;\n    static final long GNSS_USABLE_MAX_AGE_MS = 15000L;\n    static final long GNSS_LOSS_TIMEOUT_MS = 25000L;",
+    "GNSS holdover and usable-fix window",
+)
+# Keep speed limits available on a fresh, usable fix even when it misses the stricter safety-grade GNSS tier.
+main = replace_once(
+    main,
+    """        } else {
+            // Approximate/network locations are for map loading only, never curve or speed advice.
+            // Never keep an old speed limit alive after GPS quality is lost.
+            currentSpeedLimitKmh = 0;""",
+    """        } else {
+            // A moderate but fresh GNSS fix may still support road-limit lookup.
+            // Do not enable curve/safety advice or trip-distance accumulation on this path.
+            if (usableGps && l.hasAccuracy() && l.getAccuracy() <= 65f) {
+                currentSpeedLimitKmh = engine.speedLimitKmh(l);
+            } else {
+                currentSpeedLimitKmh = 0;
+            }
+            // Approximate/network locations are for map loading only, never curve or speed advice.""",
+    "speed limit lookup on usable GNSS fix",
+)
+MAIN.write_text(main, encoding="utf-8")
 main = replace_once(
     main,
     "        double smoothMarkerLat=Double.NaN,smoothMarkerLon=Double.NaN; float smoothMarkerBearing=Float.NaN;",
