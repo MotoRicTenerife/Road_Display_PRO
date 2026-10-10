@@ -5,6 +5,7 @@ The original project archive remains untouched in Git. This overlay is applied
 in CI and fails closed if expected source snippets have drifted.
 """
 from pathlib import Path
+import re
 
 ROOT = Path(__file__).resolve().parents[1]
 PROJECT = ROOT / "Road_Display_PRO"
@@ -58,7 +59,17 @@ main = replace_once(
 main = replace_once(main, "    void processLocation(Location l) {\n        if (l == null) return;", "    void processLocation(Location l) {\n        processLocation(l, false);\n    }\n\n    void processLocation(Location l, boolean fromFusedCallback) {\n        if (l == null) return;", "fused provider-aware location processing")
 main = replace_once(main, "for (Location l : result.getLocations()) processLocation(l);", "for (Location l : result.getLocations()) processLocation(l, true);", "fused callback source")
 main = replace_once(main, "if (l != null) processLocation(l);", "if (l != null) processLocation(l, true);", "fused cached source")
-main = replace_once(main, 'boolean isFused = "fused".equals(provider);', 'boolean isFused = fromFusedCallback || "fused".equals(provider);', "fused provider recognition")
+main = replace_once(main, 'boolean isFused = fromFusedCallback || "fused".equals(provider);', 'boolean isFused = "fused".equals(provider);', "do not infer GPS quality from callback origin")
+accuracy_pattern = r"boolean hasReasonableAccuracy\s*=\s*[^;]+;"
+main, accuracy_replacements = re.subn(
+    accuracy_pattern,
+    "float providerAccuracyLimit = isFused ? 50f : GNSS_USABLE_ACCURACY_M;\\n"
+    "        boolean hasReasonableAccuracy = l.hasAccuracy() && Float.isFinite(l.getAccuracy())\\n"
+    "                && l.getAccuracy() <= providerAccuracyLimit;",
+    main,
+)
+if accuracy_replacements != 1:
+    raise RuntimeError(f"provider-specific location accuracy gate: expected exactly one baseline match, got {accuracy_replacements}")
 main = replace_once(main, "        boolean usableGps = (isPlatformGnss || isFused) && hasReasonableAccuracy\n                && locationAgeMs <= GNSS_USABLE_MAX_AGE_MS;", "        boolean usableGps = (isPlatformGnss || isFused) && hasReasonableAccuracy\n                && locationAgeMs <= GNSS_USABLE_MAX_AGE_MS;\n        if (!isPlatformGnss && !isFused && lastUsableGpsAt != 0L\n                && nowMs - lastUsableGpsAt <= GNSS_LOSS_TIMEOUT_MS) return;", "ignore fallback provider over live GNSS")
 MAIN.write_text(main, encoding="utf-8")
 main = replace_once(
@@ -110,7 +121,7 @@ main = replace_once(
     "smooth marker short-horizon motion prediction",
 )
 main = main.replace("postInvalidateDelayed((navigationActive||mapExpanded)?50:1000); // Smooth navigation marker while active.", "postInvalidateDelayed((navigationActive||mapExpanded)?33:1000); // Keep the marker animation near 30 fps while active.")
-main = replace_once(main, "else if(location.hasAccuracy() && location.getAccuracy() <= 20f)", "else if(location.hasAccuracy() && location.getAccuracy() <= 65f)", "road snap for moderate but usable GPS")
+main = replace_once(main, "else if(location.hasAccuracy() && location.getAccuracy() <= 20f)", "else if(location.hasAccuracy() && location.getAccuracy() <= 65f && location.getTime() > 0L && System.currentTimeMillis() - location.getTime() <= 15000L)", "fresh-fix-only road snap for moderate but usable GPS")
 MAIN.write_text(main, encoding="utf-8")
 # Improve speed-limit alert timing to avoid transient GPS-speed spikes and alert spam.
 old_fields = """    volatile int currentSpeedLimitKmh = 0;
@@ -183,6 +194,15 @@ SMOOTH_TEST.write_text(test, encoding="utf-8")
 # Match geometry first, including roads with unknown limits, so an adjacent road's
 # limit can never be borrowed merely because the current road has no maxspeed tag.
 engine = ENGINE.read_text(encoding="utf-8")
+# Guard the rendering-only road snap against stale, inaccurate, or invalid fixes.
+engine = replace_once(
+    engine,
+    "Location mapMatchedLocation(Location l) {\n        if (l == null || ways == null || ways.isEmpty()) return null;",
+    "Location mapMatchedLocation(Location l) {\n        if (l == null || ways == null || ways.isEmpty()\n"
+    "                || !l.hasAccuracy() || !Float.isFinite(l.getAccuracy()) || l.getAccuracy() > 65f\n"
+    "                || l.getTime() <= 0L || System.currentTimeMillis() - l.getTime() > 15000L) return null;",
+    "fresh accurate location required for marker road snap",
+)
 # Critical repair: fetchOnline() existed but was never called, so the local roads DB
 # could stay empty and speedLimitKmh() would return 0 indefinitely. Load OSM ways
 # asynchronously, with bounded retry/movement cadence, never on the UI thread.
@@ -404,6 +424,28 @@ gradle = replace_once(gradle, "versionCode 539", "versionCode 544", "Android ver
 gradle = replace_once(gradle, "versionName '3.41.9'", "versionName '3.46.0'", "Android version name")
 GRADLE.write_text(gradle, encoding="utf-8")
 
+fresh_snap_test = PROJECT / "roadtools/marker_snap_gnss_regression_test.py"
+fresh_snap_test.write_text('''#!/usr/bin/env python3
+"""Source-level guardrails for map-marker road snapping."""
+from pathlib import Path
+ROOT = Path(__file__).resolve().parents[1]
+MAIN = (ROOT / "app/src/main/java/com/riccardo/roaddisplay/MainActivity.java").read_text(encoding="utf-8")
+ENGINE = (ROOT / "app/src/main/java/com/riccardo/roaddisplay/RoadEngine.java").read_text(encoding="utf-8")
+checks = {
+    "visual marker snap requires accuracy metadata": "!l.hasAccuracy()" in ENGINE and "l.getAccuracy() > 65f" in ENGINE,
+    "visual marker snap rejects non-finite accuracy": "Float.isFinite(l.getAccuracy())" in ENGINE,
+    "visual marker snap rejects fixes older than 15 seconds": "System.currentTimeMillis() - l.getTime() > 15000L" in ENGINE,
+    "render path independently rejects stale fixes before snapping": "System.currentTimeMillis() - location.getTime() <= 15000L" in MAIN,
+    "render-only snapped coordinate is not fed back into road engine": "engine.update(roadSnap)" not in MAIN and "processLocation(roadSnap)" not in MAIN,
+    "road snap remains bounded to mapped road geometry": "bestDistance > 22.0" in ENGINE,
+    "heading disagreement can reject a candidate road": "delta > 100.0 && distance > 8.0" in ENGINE,
+}
+for name, ok in checks.items():
+    print(f"{name}: {'PASS' if ok else 'FAIL'}")
+print(f"CHECKS={len(checks)} FAILURES={sum(not x for x in checks.values())}")
+raise SystemExit(0 if all(checks.values()) else 1)
+''', encoding="utf-8")
+
 speed_test = PROJECT / "roadtools/speed_limit_handling_regression_test.py"
 speed_test.write_text('''#!/usr/bin/env python3
 """Regression checks for trustworthy speed-limit selection and non-spam warnings."""
@@ -422,7 +464,8 @@ checks = {
     "repeat timer resets after 30 seconds at legal speed": "nowMs - speedLimitBelowSinceMs >= 30000L" in MAIN,
     "cached edge limit is accepted only for the same matched OSM way": "best.id.equals(matchedWayId)" in ENGINE and "return cachedNetworkSpeedLimit(l);" in ENGINE,
     "fallback network callbacks cannot erase a recent GNSS limit": "nowMs - lastUsableGpsAt <= GNSS_LOSS_TIMEOUT_MS) return;" in MAIN,
-    "Fused Location callbacks are explicitly trusted as fused": "processLocation(l, true)" in MAIN and '"fused".equals(provider)' in MAIN,
+    "callback origin alone does not promote a fix to GNSS": 'boolean isFused = "fused".equals(provider);' in MAIN and "fromFusedCallback ||" not in MAIN,
+    "fused-provider fixes use a stricter 50 m accuracy gate": "float providerAccuracyLimit = isFused ? 50f : GNSS_USABLE_ACCURACY_M;" in MAIN and "l.getAccuracy() <= providerAccuracyLimit" in MAIN,
     "moderate usable GNSS refreshes roads before limit lookup": "engine.update(l);\\n                currentSpeedLimitKmh = engine.speedLimitKmh(l);" in MAIN,
     "GPS holdover does not expire after a single brief gap": "GNSS_LOSS_TIMEOUT_MS = 40000L" in MAIN,
     "live GPS update triggers OSM road data fetch": "requestRoadDataFetch(l);" in ENGINE,
