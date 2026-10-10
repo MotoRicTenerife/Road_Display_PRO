@@ -29,7 +29,7 @@ main = MAIN.read_text(encoding="utf-8")
 main = replace_once(
     main,
     "    static final float GNSS_USABLE_ACCURACY_M = 100f;\n    static final long GNSS_STRONG_MAX_AGE_MS = 3500L;\n    static final long GNSS_USABLE_MAX_AGE_MS = 10000L;\n    static final long GNSS_LOSS_TIMEOUT_MS = 15000L;",
-    "    static final float GNSS_USABLE_ACCURACY_M = 120f;\n    static final long GNSS_STRONG_MAX_AGE_MS = 5000L;\n    static final long GNSS_USABLE_MAX_AGE_MS = 15000L;\n    static final long GNSS_LOSS_TIMEOUT_MS = 25000L;",
+    "    static final float GNSS_USABLE_ACCURACY_M = 120f;\n    static final long GNSS_STRONG_MAX_AGE_MS = 5000L;\n    static final long GNSS_USABLE_MAX_AGE_MS = 15000L;\n    static final long GNSS_LOSS_TIMEOUT_MS = 40000L;",
     "GNSS holdover and usable-fix window",
 )
 # Keep speed limits available on a fresh, usable fix even when it misses the stricter safety-grade GNSS tier.
@@ -43,6 +43,9 @@ main = replace_once(
             // A moderate but fresh GNSS fix may still support road-limit lookup.
             // Do not enable curve/safety advice or trip-distance accumulation on this path.
             if (usableGps && l.hasAccuracy() && l.getAccuracy() <= 65f) {
+                // Refresh the road snapshot before querying the limit; this also
+                // starts a throttled online edge cross-check when GPS quality permits.
+                engine.update(l);
                 currentSpeedLimitKmh = engine.speedLimitKmh(l);
             } else {
                 currentSpeedLimitKmh = 0;
@@ -50,6 +53,13 @@ main = replace_once(
             // Approximate/network locations are for map loading only, never curve or speed advice.""",
     "speed limit lookup on usable GNSS fix",
 )
+# Distinguish fused-provider callbacks from fallback network/passive updates. Network
+# callbacks must never erase a still-valid GNSS speed limit or move the live road state.
+main = replace_once(main, "    void processLocation(Location l) {\n        if (l == null) return;", "    void processLocation(Location l) {\n        processLocation(l, false);\n    }\n\n    void processLocation(Location l, boolean fromFusedCallback) {\n        if (l == null) return;", "fused provider-aware location processing")
+main = replace_once(main, "for (Location l : result.getLocations()) processLocation(l);", "for (Location l : result.getLocations()) processLocation(l, true);", "fused callback source")
+main = replace_once(main, "if (l != null) processLocation(l);", "if (l != null) processLocation(l, true);", "fused cached source")
+main = replace_once(main, 'boolean isFused = "fused".equals(provider);', 'boolean isFused = fromFusedCallback || "fused".equals(provider);', "fused provider recognition")
+main = replace_once(main, "        boolean usableGps = (isPlatformGnss || isFused) && hasReasonableAccuracy\n                && locationAgeMs <= GNSS_USABLE_MAX_AGE_MS;", "        boolean usableGps = (isPlatformGnss || isFused) && hasReasonableAccuracy\n                && locationAgeMs <= GNSS_USABLE_MAX_AGE_MS;\n        if (!isPlatformGnss && !isFused && lastUsableGpsAt != 0L\n                && nowMs - lastUsableGpsAt <= GNSS_LOSS_TIMEOUT_MS) return;", "ignore fallback provider over live GNSS")
 MAIN.write_text(main, encoding="utf-8")
 main = replace_once(
     main,
@@ -100,6 +110,7 @@ main = replace_once(
     "smooth marker short-horizon motion prediction",
 )
 main = main.replace("postInvalidateDelayed((navigationActive||mapExpanded)?50:1000); // Smooth navigation marker while active.", "postInvalidateDelayed((navigationActive||mapExpanded)?33:1000); // Keep the marker animation near 30 fps while active.")
+main = replace_once(main, "else if(location.hasAccuracy() && location.getAccuracy() <= 20f)", "else if(location.hasAccuracy() && location.getAccuracy() <= 65f)", "road snap for moderate but usable GPS")
 MAIN.write_text(main, encoding="utf-8")
 # Improve speed-limit alert timing to avoid transient GPS-speed spikes and alert spam.
 old_fields = """    volatile int currentSpeedLimitKmh = 0;
@@ -221,9 +232,12 @@ new_method = """    int speedLimitKmh(Location l) {
                 // Without a reliable direction, only a non-directional maxspeed is safe.
                 limit = parseSpeedLimit(best.maxspeed);
             }
-            // A geometrically matched road with no usable limit means "unknown".
-            // Do not borrow a neighbouring road's limit or a stale network edge.
-            return limit;
+            // If this is the very same OSM way independently matched by Valhalla,
+            // its edge limit is a safe fallback when local tags are incomplete.
+            // Never borrow a limit from a different neighbouring way.
+            if (limit > 0) return limit;
+            if (best.id != null && best.id.equals(matchedWayId)) return cachedNetworkSpeedLimit(l);
+            return 0;
         }
         return cachedNetworkSpeedLimit(l);
     }
@@ -241,6 +255,27 @@ new_method = """    int speedLimitKmh(Location l) {
 
 """
 engine = engine[:method_start] + new_method + engine[method_end:]
+# Improve map-only snapping using measured direction and a small same-way continuity bonus.
+# This snap is for rendering only; navigation/safety continue to use raw GNSS + route matcher.
+engine = replace_once(
+    engine,
+    """                if (l.hasBearing() && l.hasSpeed() && l.getSpeed() >= 5.0f && "yes".equalsIgnoreCase(way.oneway)) {
+                    double seg = bearing(a, b);
+                    double delta = Math.abs(normalizeAngle(seg - l.getBearing()));
+                    delta = Math.min(delta, 360.0 - delta);
+                    if (delta > 100.0) continue;
+                    score += delta * 0.35;
+                }""",
+    """                if (l.hasBearing() && l.hasSpeed() && l.getSpeed() >= 3.0f) {
+                    double seg = bearing(a, b);
+                    double delta = Math.abs(normalizeAngle(seg - l.getBearing()));
+                    delta = Math.min(delta, 360.0 - delta);
+                    if (delta > 100.0 && distance > 8.0) continue;
+                    score += delta * 0.22;
+                }
+                if (!matchedWayId.isEmpty() && matchedWayId.equals(way.id) && distance <= 24.0) score -= 5.0;""",
+    "heading-aware map-only road snap",
+)
 ENGINE.write_text(engine, encoding="utf-8")
 
 matcher = MATCHER.read_text(encoding="utf-8")
@@ -259,19 +294,19 @@ MATCHER.write_text(matcher, encoding="utf-8")
 # Keep every existing regression assertion aligned with the new app version.
 for test_path in (PROJECT / "roadtools").glob("*_test.py"):
     test_text = test_path.read_text(encoding="utf-8")
-    test_text = test_text.replace("versionCode 539; versionName '3.41.9'", "versionCode 542; versionName '3.44.0'")
-    test_text = test_text.replace("versionCode 540; versionName '3.42.0'", "versionCode 542; versionName '3.44.0'")
-    test_text = test_text.replace("versionName '3.41.9'", "versionName '3.44.0'")
-    test_text = test_text.replace("versionName '3.42.0'", "versionName '3.44.0'")
-    test_text = test_text.replace("version is 3.42.0", "version is 3.44.0")
-    test_text = test_text.replace("version 3.42.0", "version 3.44.0")
+    test_text = test_text.replace("versionCode 539; versionName '3.41.9'", "versionCode 543; versionName '3.45.0'")
+    test_text = test_text.replace("versionCode 540; versionName '3.42.0'", "versionCode 543; versionName '3.45.0'")
+    test_text = test_text.replace("versionName '3.41.9'", "versionName '3.45.0'")
+    test_text = test_text.replace("versionName '3.42.0'", "versionName '3.45.0'")
+    test_text = test_text.replace("version is 3.42.0", "version is 3.45.0")
+    test_text = test_text.replace("version 3.42.0", "version 3.45.0")
     test_text = test_text.replace("'return best == null || bestScore > 55.0 ? 0 : bestLimit;' in engine,", "'if (best != null && bestScore <= 55.0)' in engine and 'return limit;' in engine,")
     test_text = test_text.replace("'matchedLocation.distanceTo(l) <= 150.0f' in s", "'matchedLocation.distanceTo(l) > 100.0f' in s")
     test_text = test_text.replace("'System.currentTimeMillis()-matchedAt < 30000L' in s", "'System.currentTimeMillis() - matchedAt >= 20000L' in s")
     test_text = test_text.replace('needle = "if (ways == null || ways.isEmpty()) return 0;"', 'needle = "return cachedNetworkSpeedLimit(l);"')
     test_path.write_text(test_text, encoding="utf-8")
 
-BUILD_VERSION.write_text("3.44.0\n", encoding="utf-8")
+BUILD_VERSION.write_text("3.45.0\n", encoding="utf-8")
 ride_test = PROJECT / "roadtools/speed_limit_ride_regression_test.py"
 ride_test.write_text('''from pathlib import Path
 p = Path(__file__).resolve().parents[0] / "../app/src/main/java/com/riccardo/roaddisplay/RoadEngine.java"
@@ -289,8 +324,8 @@ print("speed-limit RIDE regression: PASS")
 ''', encoding="utf-8")
 
 gradle = GRADLE.read_text(encoding="utf-8")
-gradle = replace_once(gradle, "versionCode 539", "versionCode 542", "Android version code")
-gradle = replace_once(gradle, "versionName '3.41.9'", "versionName '3.44.0'", "Android version name")
+gradle = replace_once(gradle, "versionCode 539", "versionCode 543", "Android version code")
+gradle = replace_once(gradle, "versionName '3.41.9'", "versionName '3.45.0'", "Android version name")
 GRADLE.write_text(gradle, encoding="utf-8")
 
 speed_test = PROJECT / "roadtools/speed_limit_handling_regression_test.py"
@@ -310,7 +345,7 @@ checks = {
     "repeat warning is rate limited to 120 seconds": "nowMs - lastSpeedLimitWarningAt >= 120000L" in MAIN,
     "repeat timer resets after 30 seconds at legal speed": "nowMs - speedLimitBelowSinceMs >= 30000L" in MAIN,
     "unknown local road limit does not borrow a neighbouring or cached limit": "A geometrically matched road with no usable limit" in ENGINE and "return limit;" in ENGINE,
-    "version is 3.44.0": "versionCode 542; versionName '3.44.0'" in BUILD,
+    "version is 3.45.0": "versionCode 543; versionName '3.45.0'" in BUILD,
 }
 for name, passed in checks.items():
     print(("PASS " if passed else "FAIL ") + name)
@@ -342,5 +377,5 @@ print("Poor-accuracy fixes are down-weighted; high-accuracy confidence is preser
 ''', encoding="utf-8")
 
 print("ONLINE_NAV_PATCH=PASS")
-print("VERSION=3.44.0")
+print("VERSION=3.45.0")
 print("CHANGED=frame-rate-independent marker smoothing; GNSS-aware map matching; speed-limit freshness and anti-spam warnings")
