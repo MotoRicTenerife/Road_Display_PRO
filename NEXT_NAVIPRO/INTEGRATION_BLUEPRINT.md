@@ -19,8 +19,8 @@ NEXT NAVI PRO si sviluppa **sopra questa baseline**. La branch `main` non viene 
 1. **Navigation UI / Ride HUD** — preservare la visualizzazione moto ad alto contrasto, portrait/landscape, velocità grande e posizione stabile, indicazioni svolta, limite legale solo se noto, avvisi curve, radar, audio, modalità NEGATIVO e regolazione automatica della luminosità.
 2. **Location & Sensor Fusion** — usare la posizione GNSS con accuratezza/età del fix; integrare il matcher e la fusione sensori già esistenti senza usare bussola/IMU come sostituti della posizione GPS. Evitare salti tra carreggiate parallele e rendere il marker fluido senza accumulare ritardo.
 3. **Road Graph / Map Matching** — evolvere `RouteMapMatcher` e `RoadEngine` con candidati stradali, direzione di marcia, senso unico, continuità del percorso, accuratezza GNSS e confidenza esplicita. Quando la confidenza è insufficiente, dichiararlo invece di inventare una strada o un limite.
-4. **Offline Map Data** — introdurre un provider dati regionale installabile/aggiornabile (Tenerife prima), con geometrie, attributi OSM e indici spaziali locali. Non pre-scaricare in blocco il server standard delle tile raster OSM; utilizzare un dataset/provider che autorizzi distribuzione e uso offline e mostrare l'attribuzione richiesta.
-5. **Routing & Re-routing** — routing locale su grafo con sensi unici, accessi, rotatorie e profilo moto; ricalcolo solo dopo deviazione credibile, con soglie legate all'accuratezza GNSS. Il routing online rimane fallback esplicito finché il motore offline non è validato.
+4. **Universal Offline Map Manager** — catalogo mondiale per continente/paese/regione/città, non hardcoded a Tenerife. Ogni pacchetto dichiara area geografica, formato, versione/datasource, dimensione stimata, checksum, timestamp, licenza/attribuzione e compatibilità. Il gestore deve consentire selezione multi-regione, download riprendibile, spazio libero stimato, pausa/riprova, verifica integrità, controllo aggiornamenti, aggiornamento atomico (il vecchio pacchetto resta attivo finché il nuovo non è valido), rollback, eliminazione con conferma e indicazione di mappe in uso. Copertura e formati devono dipendere dal catalogo effettivamente disponibile, senza promettere dati inesistenti. Non pre-scaricare in blocco il server standard delle tile raster OSM.
+5. **Rendering, Routing & Re-routing** — rendering vettoriale offline e routing locale devono usare formati/engine compatibili e testati: il solo download di un file OSM PBF non equivale a una mappa navigabile. Routing su grafo con sensi unici, accessi, rotatorie e profilo moto; ricalcolo solo dopo deviazione credibile, con soglie legate all'accuratezza GNSS. Il routing online rimane fallback esplicito finché il motore offline non è validato.
 6. **Ricerca locale** — indice indirizzi/POI nel pacchetto regionale, risultati chiaramente distinguibili tra offline e online.
 7. **Radar / POI** — conservare il database e la freschezza già implementati; indice spaziale per ridurre query e latenza, senza perdere i record validi quando un aggiornamento fallisce. Avvisi solo con posizione sufficientemente accurata e limiti legali effettivamente noti.
 8. **Voice Guidance** — preservare gli annunci in due fasi e le correzioni 3.41.9; aggiungere semantica robusta delle uscite dalle rotonde e silenziamento dopo arrivo senza duplicare avvisi.
@@ -49,16 +49,25 @@ Riferimenti iniziali:
 - testare ricalcolo, deviazione, rotonde, annunci, ETA, limiti ignoti e arrivo;
 - mantenere i regressions test come guardrail.
 
-### Fase 3 — motore offline
-- scegliere e documentare il formato del grafo e il processo di generazione del pacchetto Tenerife;
-- implementare import/aggiornamento atomico del pacchetto, indici spaziali e query locali;
-- integrare rendering vettoriale offline e routing offline come moduli separati;
+### Fase 3 — motore offline universale
+- scegliere un formato dati che supporti aree globali e pacchetti regionali senza imporre un limite alle Canarie/Spagna;
+- costruire un catalogo aggiornabile continente → paese → regione → area locale, con pacchetti compatibili e metadati di licenza;
+- implementare download riprendibili, checksum, spazio libero, aggiornamento atomico, rollback, rimozione e controllo versioni;
+- implementare separatamente renderer offline, ricerca offline e routing offline: scaricare una mappa non deve essere confuso con scaricare solo le geometrie stradali;
+- rendere i pacchetti radar/POI una sorgente distinta con propria data di aggiornamento, copertura e provenienza; sincronizzazione online e uso offline, senza inventare radar assenti;
 - dichiarare esplicitamente quando dati o percorso non sono disponibili.
 
 ### Fase 4 — integrazione finale
 - ricerca offline, POI/radar, GPX, viaggio/telemetria, voce e UI;
 - stress test, crash test, build CI, installazione e prove reali su S22 Ultra;
 - promuovere la versione soltanto dopo test superati e report verificabile.
+
+## Gestione delle mappe — requisiti utente
+- L'utente può scaricare una o più aree qualsiasi del catalogo disponibile (es. Canarie, Spagna, paesi UE, altri paesi o regioni globali), non soltanto una regione fissa.
+- Per ogni area: dimensione stimata, spazio richiesto, download/progresso, pausa/riprova, versione installata, ultima verifica, aggiornamento disponibile, aggiorna, elimina.
+- Aggiornamenti con verifica checksum e sostituzione atomica; un download interrotto o corrotto non deve cancellare la mappa valida precedente.
+- Mappa, ricerca, routing, limiti stradali e radar/POI hanno coperture e aggiornamenti distinti: UI e messaggi devono mostrare ciò che è davvero installato.
+- Il catalogo può essere esteso nel tempo; non si finge che ogni area abbia gli stessi dati o lo stesso livello di dettaglio.
 
 ## Criteri di accettazione non negoziabili
 
