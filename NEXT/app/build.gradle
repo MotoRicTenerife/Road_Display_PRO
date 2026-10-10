@@ -10,8 +10,8 @@ android {
         applicationId 'com.riccardo.roaddisplay'
         minSdk 26
         targetSdk 35
-        versionCode 40001
-        versionName '4.0.0-NEXT-ALPHA2'
+        versionCode 40002
+        versionName '4.0.0-NEXT-ALPHA3'
         testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
     }
 
