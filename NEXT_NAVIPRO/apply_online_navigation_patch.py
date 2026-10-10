@@ -183,6 +183,59 @@ SMOOTH_TEST.write_text(test, encoding="utf-8")
 # Match geometry first, including roads with unknown limits, so an adjacent road's
 # limit can never be borrowed merely because the current road has no maxspeed tag.
 engine = ENGINE.read_text(encoding="utf-8")
+# Critical repair: fetchOnline() existed but was never called, so the local roads DB
+# could stay empty and speedLimitKmh() would return 0 indefinitely. Load OSM ways
+# asynchronously, with bounded retry/movement cadence, never on the UI thread.
+engine = replace_once(
+    engine,
+    "    volatile boolean crossCheckInFlight = false;",
+    "    volatile boolean crossCheckInFlight = false;\n"
+    "    volatile boolean roadFetchInFlight = false;\n"
+    "    volatile Location loc;\n"
+    "    Location lastRoadFetchLocation;\n"
+    "    long lastRoadFetchAt = 0L;",
+    "online OSM road-fetch state",
+)
+engine = replace_once(
+    engine,
+    "        if (refresh) reloadRoads(l);",
+    "        if (refresh) reloadRoads(l);\n        requestRoadDataFetch(l);",
+    "trigger OSM road fetch from live location updates",
+)
+engine = replace_once(
+    engine,
+    "    boolean update(Location l) {",
+    """    void requestRoadDataFetch(Location l) {
+        if (l == null || !l.hasAccuracy() || !Float.isFinite(l.getAccuracy())
+                || l.getAccuracy() > 65f || roadFetchInFlight) return;
+        long now = System.currentTimeMillis();
+        boolean noLocalRoads = ways == null || ways.isEmpty();
+        boolean movedFar = lastRoadFetchLocation == null
+                || lastRoadFetchLocation.distanceTo(l) >= 5000f;
+        boolean retryDue = lastRoadFetchAt == 0L
+                || now - lastRoadFetchAt >= (noLocalRoads ? 60000L : 15L * 60L * 1000L);
+        if (!noLocalRoads && !movedFar && !retryDue) return;
+        roadFetchInFlight = true;
+        lastRoadFetchAt = now;
+        lastRoadFetchLocation = new Location(l);
+        final Location queryLocation = new Location(l);
+        new Thread(() -> {
+            boolean loaded = false;
+            try { loaded = fetchOnline(queryLocation); }
+            catch (Exception ignored) { }
+            finally {
+                if (loaded) {
+                    Location latest = loc == null ? queryLocation : new Location(loc);
+                    reloadRoads(latest);
+                }
+                roadFetchInFlight = false;
+            }
+        }, "osm-road-data-fetch").start();
+    }
+
+    boolean update(Location l) {""",
+    "asynchronous OSM road fetch implementation",
+)
 method_start = engine.index("    int speedLimitKmh(Location l) {")
 method_end = engine.index("    double distanceToSegmentMeters", method_start)
 new_method = """    int speedLimitKmh(Location l) {
@@ -294,12 +347,12 @@ MATCHER.write_text(matcher, encoding="utf-8")
 # Keep every existing regression assertion aligned with the new app version.
 for test_path in (PROJECT / "roadtools").glob("*_test.py"):
     test_text = test_path.read_text(encoding="utf-8")
-    test_text = test_text.replace("versionCode 539; versionName '3.41.9'", "versionCode 543; versionName '3.45.0'")
-    test_text = test_text.replace("versionCode 540; versionName '3.42.0'", "versionCode 543; versionName '3.45.0'")
-    test_text = test_text.replace("versionName '3.41.9'", "versionName '3.45.0'")
-    test_text = test_text.replace("versionName '3.42.0'", "versionName '3.45.0'")
-    test_text = test_text.replace("version is 3.42.0", "version is 3.45.0")
-    test_text = test_text.replace("version 3.42.0", "version 3.45.0")
+    test_text = test_text.replace("versionCode 539; versionName '3.41.9'", "versionCode 544; versionName '3.46.0'")
+    test_text = test_text.replace("versionCode 540; versionName '3.42.0'", "versionCode 544; versionName '3.46.0'")
+    test_text = test_text.replace("versionName '3.41.9'", "versionName '3.46.0'")
+    test_text = test_text.replace("versionName '3.42.0'", "versionName '3.46.0'")
+    test_text = test_text.replace("version is 3.42.0", "version is 3.46.0")
+    test_text = test_text.replace("version 3.42.0", "version 3.46.0")
     test_text = test_text.replace("'return best == null || bestScore > 55.0 ? 0 : bestLimit;' in engine,", "'if (best != null && bestScore <= 55.0)' in engine and 'return limit;' in engine,")
     test_text = test_text.replace("'snap restricted to accurate fixes': 'location.getAccuracy() <= 20f' in main,", "'road snap accepts moderate but usable fixes': 'location.getAccuracy() <= 65f' in main,")
     test_text = test_text.replace("'oneway heading filter exists': '\"yes\".equalsIgnoreCase(way.oneway)' in engine,", "'heading-aware road snap exists': 'score += delta * 0.22;' in engine and 'matchedWayId.equals(way.id)' in engine,")
@@ -308,7 +361,7 @@ for test_path in (PROJECT / "roadtools").glob("*_test.py"):
     test_text = test_text.replace('needle = "if (ways == null || ways.isEmpty()) return 0;"', 'needle = "return cachedNetworkSpeedLimit(l);"')
     test_path.write_text(test_text, encoding="utf-8")
 
-BUILD_VERSION.write_text("3.45.0\n", encoding="utf-8")
+BUILD_VERSION.write_text("3.46.0\n", encoding="utf-8")
 ride_test = PROJECT / "roadtools/speed_limit_ride_regression_test.py"
 ride_test.write_text('''from pathlib import Path
 p = Path(__file__).resolve().parents[0] / "../app/src/main/java/com/riccardo/roaddisplay/RoadEngine.java"
@@ -327,8 +380,8 @@ print("speed-limit RIDE regression: PASS")
 ''', encoding="utf-8")
 
 gradle = GRADLE.read_text(encoding="utf-8")
-gradle = replace_once(gradle, "versionCode 539", "versionCode 543", "Android version code")
-gradle = replace_once(gradle, "versionName '3.41.9'", "versionName '3.45.0'", "Android version name")
+gradle = replace_once(gradle, "versionCode 539", "versionCode 544", "Android version code")
+gradle = replace_once(gradle, "versionName '3.41.9'", "versionName '3.46.0'", "Android version name")
 GRADLE.write_text(gradle, encoding="utf-8")
 
 speed_test = PROJECT / "roadtools/speed_limit_handling_regression_test.py"
@@ -352,7 +405,11 @@ checks = {
     "Fused Location callbacks are explicitly trusted as fused": "processLocation(l, true)" in MAIN and '"fused".equals(provider)' in MAIN,
     "moderate usable GNSS refreshes roads before limit lookup": "engine.update(l);\\n                currentSpeedLimitKmh = engine.speedLimitKmh(l);" in MAIN,
     "GPS holdover does not expire after a single brief gap": "GNSS_LOSS_TIMEOUT_MS = 40000L" in MAIN,
-    "version is 3.45.0": "versionCode 543; versionName '3.45.0'" in BUILD,
+    "live GPS update triggers OSM road data fetch": "requestRoadDataFetch(l);" in ENGINE,
+    "OSM road fetch is asynchronous, not on UI thread": '"osm-road-data-fetch"' in ENGINE and "new Thread(() ->" in ENGINE,
+    "OSM fetch retries when no local roads are available": "noLocalRoads ? 60000L" in ENGINE,
+    "speed-limit geometry lookup remains conservative": "Never borrow a limit from a different neighbouring way." in ENGINE,
+    "version is 3.46.0": "versionCode 544; versionName '3.46.0'" in BUILD,
 }
 for name, passed in checks.items():
     print(("PASS " if passed else "FAIL ") + name)
@@ -384,5 +441,5 @@ print("Poor-accuracy fixes are down-weighted; high-accuracy confidence is preser
 ''', encoding="utf-8")
 
 print("ONLINE_NAV_PATCH=PASS")
-print("VERSION=3.45.0")
+print("VERSION=3.46.0")
 print("CHANGED=frame-rate-independent marker smoothing; GNSS-aware map matching; speed-limit freshness and anti-spam warnings")
