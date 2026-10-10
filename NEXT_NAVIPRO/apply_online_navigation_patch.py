@@ -1,16 +1,19 @@
 #!/usr/bin/env python3
-"""Apply the reviewed online-navigation patch to the archived Android baseline.
+"""Apply deterministic online-navigation quality overlays to the archived Android baseline.
 
-The repository keeps the original, user-provided source archive intact. This
-script applies a small, deterministic source overlay during CI before tests and
-APK compilation. It fails closed if the expected baseline has drifted.
+The original project archive remains untouched in Git. This overlay is applied
+in CI and fails closed if expected source snippets have drifted.
 """
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 PROJECT = ROOT / "Road_Display_PRO"
 MAIN = PROJECT / "app/src/main/java/com/riccardo/roaddisplay/MainActivity.java"
+MATCHER = PROJECT / "app/src/main/java/com/riccardo/roaddisplay/RouteMapMatcher.java"
 SMOOTH_TEST = PROJECT / "roadtools/map_marker_smoothing_regression_test.py"
+RADAR_TEST = PROJECT / "roadtools/radar_system_regression_test.py"
+BUILD_VERSION = PROJECT / "BUILD_VERSION.txt"
+GRADLE = PROJECT / "app/build.gradle"
 
 def replace_once(text: str, old: str, new: str, label: str) -> str:
     count = text.count(old)
@@ -65,5 +68,52 @@ test = replace_once(
     "marker smoothing regression assertions",
 )
 SMOOTH_TEST.write_text(test, encoding="utf-8")
+
+matcher = MATCHER.read_text(encoding="utf-8")
+matcher = replace_once(
+    matcher,
+    """        return Math.max(0.0, Math.min(1.0, 0.52 * distScore + 0.28 * marginScore + 0.20 * continuity));""",
+    """        // Confidence must fall when GNSS accuracy degrades; otherwise a very poor fix
+        // can look deceptively trustworthy because its distance tolerance is widened.
+        double accuracyFactor = Math.max(0.25, Math.min(1.0, 25.0 / accuracy(l)));
+        double baseConfidence = 0.52 * distScore + 0.28 * marginScore + 0.20 * continuity;
+        return Math.max(0.0, Math.min(1.0, baseConfidence * accuracyFactor));""",
+    "GNSS accuracy confidence weighting",
+)
+MATCHER.write_text(matcher, encoding="utf-8")
+
+radar_test = RADAR_TEST.read_text(encoding="utf-8")
+radar_test = replace_once(radar_test, "versionName '3.41.9'", "versionName '3.42.0'", "radar test version")
+RADAR_TEST.write_text(radar_test, encoding="utf-8")
+
+BUILD_VERSION.write_text("3.42.0\n", encoding="utf-8")
+gradle = GRADLE.read_text(encoding="utf-8")
+gradle = replace_once(gradle, "versionName '3.41.9'", "versionName '3.42.0'", "Android version name")
+GRADLE.write_text(gradle, encoding="utf-8")
+
+new_test = PROJECT / "roadtools/map_matching_confidence_regression_test.py"
+new_test.write_text('''#!/usr/bin/env python3
+"""Regression checks for GNSS-quality-aware route map-matching confidence."""
+from pathlib import Path
+import math
+ROOT = Path(__file__).resolve().parents[1]
+SOURCE = (ROOT / "app/src/main/java/com/riccardo/roaddisplay/RouteMapMatcher.java").read_text(encoding="utf-8")
+assert "double accuracyFactor = Math.max(0.25, Math.min(1.0, 25.0 / accuracy(l)));" in SOURCE
+assert "baseConfidence * accuracyFactor" in SOURCE
+assert "return Math.max(0.0, Math.min(1.0, baseConfidence * accuracyFactor));" in SOURCE
+# With identical geometric/heading evidence, poor accuracy must never increase confidence.
+for base in [i / 100.0 for i in range(101)]:
+    scores = []
+    for acc in [3, 5, 8, 12, 20, 25, 35, 50, 80]:
+        factor = max(0.25, min(1.0, 25.0 / max(3.0, min(80.0, acc))))
+        scores.append(base * factor)
+    assert all(a >= b for a, b in zip(scores, scores[1:])), "confidence rose as GNSS accuracy worsened"
+assert math.isclose(max(0.25, min(1.0, 25.0 / 80.0)), 0.3125)
+assert max(0.25, min(1.0, 25.0 / 80.0)) < max(0.25, min(1.0, 25.0 / 5.0))
+print("MAP MATCHING GNSS CONFIDENCE REGRESSION: PASS")
+print("Poor-accuracy fixes are down-weighted; high-accuracy confidence is preserved.")
+''', encoding="utf-8")
+
 print("ONLINE_NAV_PATCH=PASS")
-print("CHANGED=RideView marker smoothing; roadtools marker smoothing regression")
+print("VERSION=3.42.0")
+print("CHANGED=frame-rate-independent marker smoothing; GNSS-quality-weighted map-matching confidence; targeted regression test")
