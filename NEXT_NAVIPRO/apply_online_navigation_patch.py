@@ -5,6 +5,7 @@ The original project archive remains untouched in Git. This overlay is applied
 in CI and fails closed if expected source snippets have drifted.
 """
 from pathlib import Path
+import re
 
 ROOT = Path(__file__).resolve().parents[1]
 PROJECT = ROOT / "Road_Display_PRO"
@@ -59,14 +60,16 @@ main = replace_once(main, "    void processLocation(Location l) {\n        if (l
 main = replace_once(main, "for (Location l : result.getLocations()) processLocation(l);", "for (Location l : result.getLocations()) processLocation(l, true);", "fused callback source")
 main = replace_once(main, "if (l != null) processLocation(l);", "if (l != null) processLocation(l, true);", "fused cached source")
 main = replace_once(main, 'boolean isFused = fromFusedCallback || "fused".equals(provider);', 'boolean isFused = "fused".equals(provider);', "do not infer GPS quality from callback origin")
-main = replace_once(
-    main,
-    "        boolean hasReasonableAccuracy = l.hasAccuracy() && l.getAccuracy() <= GNSS_USABLE_ACCURACY_M;",
-    "        float providerAccuracyLimit = isFused ? 50f : GNSS_USABLE_ACCURACY_M;\n"
-    "        boolean hasReasonableAccuracy = l.hasAccuracy() && Float.isFinite(l.getAccuracy())\n"
+accuracy_pattern = r"boolean hasReasonableAccuracy\s*=\s*l\.hasAccuracy\(\)\s*&&\s*l\.getAccuracy\(\)\s*<=\s*[^;]+;"
+main, accuracy_replacements = re.subn(
+    accuracy_pattern,
+    "float providerAccuracyLimit = isFused ? 50f : GNSS_USABLE_ACCURACY_M;\\n"
+    "        boolean hasReasonableAccuracy = l.hasAccuracy() && Float.isFinite(l.getAccuracy())\\n"
     "                && l.getAccuracy() <= providerAccuracyLimit;",
-    "provider-specific location accuracy gate",
+    main,
 )
+if accuracy_replacements != 1:
+    raise RuntimeError(f"provider-specific location accuracy gate: expected exactly one baseline match, got {accuracy_replacements}")
 main = replace_once(main, "        boolean usableGps = (isPlatformGnss || isFused) && hasReasonableAccuracy\n                && locationAgeMs <= GNSS_USABLE_MAX_AGE_MS;", "        boolean usableGps = (isPlatformGnss || isFused) && hasReasonableAccuracy\n                && locationAgeMs <= GNSS_USABLE_MAX_AGE_MS;\n        if (!isPlatformGnss && !isFused && lastUsableGpsAt != 0L\n                && nowMs - lastUsableGpsAt <= GNSS_LOSS_TIMEOUT_MS) return;", "ignore fallback provider over live GNSS")
 MAIN.write_text(main, encoding="utf-8")
 main = replace_once(
