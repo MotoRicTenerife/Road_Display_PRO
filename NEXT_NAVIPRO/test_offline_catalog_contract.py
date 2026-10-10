@@ -19,7 +19,7 @@ class OfflineCatalogContract(unittest.TestCase):
 
     def test_catalog_is_global_and_not_tenerife_hardcoded(self):
         self.assertEqual(self.schema["catalog_scope"], "global")
-        self.assertIn("regions", self.schema)
+        self.assertIn("catalog_hierarchy", self.schema)
         self.assertTrue(self.schema["region_selection"]["multi_select"])
 
     def test_required_lifecycle_operations_are_declared(self):
