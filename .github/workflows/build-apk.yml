@@ -7,6 +7,7 @@ on:
     branches:
       - main
       - master
+      - 'next-navi-pro/**'
 
 jobs:
   build:
@@ -21,6 +22,24 @@ jobs:
           unzip -o Road_Display_PRO_3.0.0.zip
           ls -la
           ls -la Road_Display_PRO
+
+      - name: Verify baseline and run existing regression suite
+        working-directory: Road_Display_PRO
+        run: |
+          set -euo pipefail
+          test "$(tr -d '\r\n' < BUILD_VERSION.txt)" = "3.41.9"
+          grep -Fq "applicationId 'com.riccardo.roaddisplay'" app/build.gradle
+          grep -Fq "versionName '3.41.9'" app/build.gradle
+          echo "Verified application baseline: $(cat BUILD_VERSION.txt)"
+          test -d roadtools
+          test -f roadtools/navigation_voice_speed_map_regression_test.py
+          test -f roadtools/radar_system_regression_test.py
+          test -f roadtools/recent_user_feedback_regression_test.py
+          for test_file in roadtools/*_test.py; do
+            echo "::group::Regression: $test_file"
+            python3 "$test_file"
+            echo "::endgroup::"
+          done
 
       - name: Ensure AndroidX is enabled
         working-directory: Road_Display_PRO
@@ -58,5 +77,5 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: road-display-pro-3.0.0-debug
+          name: next-navi-pro-baseline-3.41.9-debug
           path: Road_Display_PRO/app/build/outputs/apk/debug/app-debug.apk
