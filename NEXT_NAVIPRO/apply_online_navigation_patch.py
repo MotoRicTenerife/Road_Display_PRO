@@ -222,8 +222,8 @@ for test_path in (PROJECT / "roadtools").glob("*_test.py"):
 
 BUILD_VERSION.write_text("3.43.0\n", encoding="utf-8")
 gradle = GRADLE.read_text(encoding="utf-8")
-gradle = replace_once(gradle, "versionCode 540", "versionCode 541", "Android version code")
-gradle = replace_once(gradle, "versionName '3.42.0'", "versionName '3.43.0'", "Android version name")
+gradle = replace_once(gradle, "versionCode 539", "versionCode 541", "Android version code")
+gradle = replace_once(gradle, "versionName '3.41.9'", "versionName '3.43.0'", "Android version name")
 GRADLE.write_text(gradle, encoding="utf-8")
 
 speed_test = PROJECT / "roadtools/speed_limit_handling_regression_test.py"
