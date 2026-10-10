@@ -195,7 +195,7 @@ new_method = """    int speedLimitKmh(Location l) {
     }
 
 """
-engine = engine.substring(0, method_start) + new_method + engine.substring(method_end);
+engine = engine[:method_start] + new_method + engine[method_end:]
 ENGINE.write_text(engine, encoding="utf-8")
 
 matcher = MATCHER.read_text(encoding="utf-8")
