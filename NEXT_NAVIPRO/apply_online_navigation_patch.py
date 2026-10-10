@@ -375,7 +375,7 @@ for test_path in (PROJECT / "roadtools").glob("*_test.py"):
     test_text = test_text.replace("version 3.42.0", "version 3.46.0")
     test_text = test_text.replace("'return best == null || bestScore > 55.0 ? 0 : bestLimit;' in engine,", "'if (best != null && bestScore <= 55.0)' in engine and 'return limit;' in engine,")
     test_text = test_text.replace("'snap restricted to accurate fixes': 'location.getAccuracy() <= 20f' in main,", "'road snap accepts moderate but usable fixes': 'location.getAccuracy() <= 65f' in main,")
-    test_text = test_text.replace("'oneway heading filter exists': '\"yes\".equalsIgnoreCase(way.oneway)' in engine,", "'heading-aware road snap exists': 'score += delta * 0.22;' in engine and 'matchedWayId.equals(way.id)' in engine,")
+    test_text = test_text.replace("'oneway heading filter exists': '\"yes\".equalsIgnoreCase(way.oneway)' in engine,", "'heading-aware road snap exists': 'score += delta * 0.22;' in engine and 'displayMatchedWayId.equals(way.id)' in engine,")
     test_text = test_text.replace("'matchedLocation.distanceTo(l) <= 150.0f' in s", "'matchedLocation.distanceTo(l) > 100.0f' in s")
     test_text = test_text.replace("'System.currentTimeMillis()-matchedAt < 30000L' in s", "'System.currentTimeMillis() - matchedAt >= 20000L' in s")
     test_text = test_text.replace('needle = "if (ways == null || ways.isEmpty()) return 0;"', 'needle = "return cachedNetworkSpeedLimit(l);"')
