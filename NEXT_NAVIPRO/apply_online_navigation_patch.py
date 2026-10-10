@@ -161,9 +161,9 @@ test = replace_once(
     "    'high-speed marker smoothing is more responsive': 'location.getSpeed()>18f?0.72:0.55' in main,",
     "    'marker smoothing uses elapsed frame time': 'smoothMarkerLastFrameAt' in main and 'SystemClock.elapsedRealtime()' in main,\n"
     "    'marker smoothing is frame-rate independent': '1.0-Math.exp(-markerDt/(motorwaySpeed?0.12:0.20))' in main,\n"
-    "    'bearing smoothing uses a time constant': 'bearingAlpha=1.0-Math.exp(-markerDt/(motorwaySpeed?0.10:0.18))' in main,
-    'marker predicts only a short horizon between GPS samples': 'Math.min(0.55, fixAgeMs / 1000.0)' in main and 'distanceAhead = location.getSpeed() * predictSeconds' in main,
-    'active map animation refreshes near 30 fps': 'postInvalidateDelayed(33); // Keep the marker animation near 30 fps while active.' in main,",
+    "    'bearing smoothing uses a time constant': 'bearingAlpha=1.0-Math.exp(-markerDt/(motorwaySpeed?0.10:0.18))' in main,\n"
+    "    'marker predicts only a short horizon between GPS samples': 'Math.min(0.55, fixAgeMs / 1000.0)' in main and 'distanceAhead = location.getSpeed() * predictSeconds' in main,\n"
+    "    'active map animation refreshes near 30 fps': 'postInvalidateDelayed(33); // Keep the marker animation near 30 fps while active.' in main,",
     "marker smoothing regression assertions",
 )
 SMOOTH_TEST.write_text(test, encoding="utf-8")
