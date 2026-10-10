@@ -10,6 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 PROJECT = ROOT / "Road_Display_PRO"
 MAIN = PROJECT / "app/src/main/java/com/riccardo/roaddisplay/MainActivity.java"
 MATCHER = PROJECT / "app/src/main/java/com/riccardo/roaddisplay/RouteMapMatcher.java"
+ENGINE = PROJECT / "app/src/main/java/com/riccardo/roaddisplay/RoadEngine.java"
 SMOOTH_TEST = PROJECT / "roadtools/map_marker_smoothing_regression_test.py"
 RADAR_TEST = PROJECT / "roadtools/radar_system_regression_test.py"
 BUILD_VERSION = PROJECT / "BUILD_VERSION.txt"
@@ -57,6 +58,59 @@ new_smoothing = """                    float targetGap=sm.distanceTo(tg);
                     }"""
 main = replace_once(main, old_smoothing, new_smoothing, "time-based marker smoothing")
 MAIN.write_text(main, encoding="utf-8")
+# Improve speed-limit alert timing to avoid transient GPS-speed spikes and alert spam.
+old_fields = """    volatile int currentSpeedLimitKmh = 0;
+    boolean speedLimitAlerted = false;"""
+new_fields = """    volatile int currentSpeedLimitKmh = 0;
+    boolean speedLimitAlerted = false;
+    volatile long speedLimitOverSinceMs = 0L;
+    volatile long speedLimitBelowSinceMs = 0L;
+    volatile long lastSpeedLimitWarningAt = 0L;"""
+main = replace_once(main, old_fields, new_fields, "speed limit alert state")
+old_warn = """                if (actualKmh > currentSpeedLimitKmh + 3f) {
+                    if (!speedLimitAlerted) {
+                        beepSpeedLimit(); speedLimitAlerted = true;
+                        if (audio && navigationTtsReady && navigationTts != null && nowMs - lastSpeedLimitVoiceAt > 8000L) {
+                            final int lim = currentSpeedLimitKmh; lastSpeedLimitVoiceAt = nowMs;
+                            runOnUiThread(() -> { try { navigationTts.speak("Attenzione, limite " + lim + " chilometri orari.", TextToSpeech.QUEUE_FLUSH, null, "speed-limit-over"); } catch (Exception ignored) { } });
+                        }
+                    }
+                } else if (actualKmh <= currentSpeedLimitKmh - 3f) speedLimitAlerted = false;"""
+new_warn = """                if (actualKmh > currentSpeedLimitKmh + 3f) {
+                    speedLimitBelowSinceMs = 0L;
+                    if (speedLimitOverSinceMs == 0L) speedLimitOverSinceMs = nowMs;
+                    // OsmAnd-style anti-spam: require 5 seconds of continuous overspeed,
+                    // then repeat no more often than every 120 seconds.
+                    if (nowMs - speedLimitOverSinceMs >= 5000L
+                            && (lastSpeedLimitWarningAt == 0L || nowMs - lastSpeedLimitWarningAt >= 120000L)) {
+                        beepSpeedLimit();
+                        speedLimitAlerted = true;
+                        lastSpeedLimitWarningAt = nowMs;
+                        if (audio && navigationTtsReady && navigationTts != null) {
+                            final int lim = currentSpeedLimitKmh;
+                            lastSpeedLimitVoiceAt = nowMs;
+                            runOnUiThread(() -> { try { navigationTts.speak("Attenzione, limite " + lim + " chilometri orari.", TextToSpeech.QUEUE_FLUSH, null, "speed-limit-over"); } catch (Exception ignored) { } });
+                        }
+                    }
+                } else {
+                    speedLimitOverSinceMs = 0L;
+                    if (actualKmh <= currentSpeedLimitKmh) {
+                        if (speedLimitBelowSinceMs == 0L) speedLimitBelowSinceMs = nowMs;
+                        // Reset the repeat timer only after 30 seconds at/below the legal limit.
+                        if (nowMs - speedLimitBelowSinceMs >= 30000L) {
+                            lastSpeedLimitWarningAt = 0L;
+                            speedLimitAlerted = false;
+                        }
+                    } else {
+                        speedLimitBelowSinceMs = 0L;
+                    }
+                }"""
+main = replace_once(main, old_warn, new_warn, "debounced speed limit warning")
+main = main.replace("                speedLimitAlerted = false;\n                if (lastSpokenSpeedLimitKmh > 0)", "                speedLimitAlerted = false;\n                speedLimitOverSinceMs = 0L; speedLimitBelowSinceMs = 0L; lastSpeedLimitWarningAt = 0L;\n                if (lastSpokenSpeedLimitKmh > 0)")
+main = main.replace("            speedLimitAlerted = false;\n            engine.loc = new Location(l);", "            speedLimitAlerted = false; speedLimitOverSinceMs = 0L; speedLimitBelowSinceMs = 0L; lastSpeedLimitWarningAt = 0L;\n            engine.loc = new Location(l);")
+MAIN.write_text(main, encoding="utf-8")
+
+
 
 test = SMOOTH_TEST.read_text(encoding="utf-8")
 test = replace_once(
@@ -68,6 +122,42 @@ test = replace_once(
     "marker smoothing regression assertions",
 )
 SMOOTH_TEST.write_text(test, encoding="utf-8")
+
+
+# Prefer the local OSM geometry match to a cached network edge, especially at junctions.
+engine = ENGINE.read_text(encoding="utf-8")
+old_cache = """        if(!matchedWayId.isEmpty() && matchedSpeedLimitKmh>0 && matchedLocation!=null
+                && System.currentTimeMillis()-matchedAt < 30000L
+                && matchedLocation.distanceTo(l) <= 150.0f){
+            return matchedSpeedLimitKmh;
+        }
+        if (ways == null || ways.isEmpty()) return 0;"""
+new_cache = """        if (ways == null || ways.isEmpty()) return cachedNetworkSpeedLimit(l);"""
+engine = replace_once(engine, old_cache, new_cache, "local limit takes priority over cached network edge")
+old_return = """        return best == null || bestScore > 55.0 ? 0 : bestLimit;
+    }
+
+    double distanceToSegmentMeters"""
+new_return = """        if (best != null && bestScore <= 55.0 && bestLimit > 0) return bestLimit;
+        // Network correlation is a fallback only: never let an old edge override
+        // a current local geometry match at a junction or parallel carriageway.
+        return cachedNetworkSpeedLimit(l);
+    }
+
+    int cachedNetworkSpeedLimit(Location l) {
+        if (l == null || matchedWayId.isEmpty() || matchedSpeedLimitKmh <= 0 || matchedLocation == null) return 0;
+        if (System.currentTimeMillis() - matchedAt >= 20000L || matchedLocation.distanceTo(l) > 100.0f) return 0;
+        if (l.hasBearing() && l.hasSpeed() && l.getSpeed() >= 3f && matchedLocation.hasBearing()) {
+            double delta = Math.abs(normalizeAngle(l.getBearing() - matchedLocation.getBearing()));
+            delta = Math.min(delta, 360.0 - delta);
+            if (delta > 55.0 && matchedLocation.distanceTo(l) > 12.0f) return 0;
+        }
+        return matchedSpeedLimitKmh;
+    }
+
+    double distanceToSegmentMeters"""
+engine = replace_once(engine, old_return, new_return, "network speed limit fallback")
+ENGINE.write_text(engine, encoding="utf-8")
 
 matcher = MATCHER.read_text(encoding="utf-8")
 matcher = replace_once(
@@ -85,17 +175,42 @@ MATCHER.write_text(matcher, encoding="utf-8")
 # Keep every existing regression assertion aligned with the new app version.
 for test_path in (PROJECT / "roadtools").glob("*_test.py"):
     test_text = test_path.read_text(encoding="utf-8")
-    test_text = test_text.replace("versionCode 539; versionName '3.41.9'", "versionCode 540; versionName '3.42.0'")
-    test_text = test_text.replace("versionName '3.41.9'", "versionName '3.42.0'")
-    test_text = test_text.replace("version is 3.41.9", "version is 3.42.0")
-    test_text = test_text.replace("version 3.41.9", "version 3.42.0")
+    test_text = test_text.replace("versionCode 540; versionName '3.42.0'", "versionCode 541; versionName '3.43.0'")
+    test_text = test_text.replace("versionName '3.42.0'", "versionName '3.43.0'")
+    test_text = test_text.replace("version is 3.42.0", "version is 3.43.0")
+    test_text = test_text.replace("version 3.42.0", "version 3.43.0")
     test_path.write_text(test_text, encoding="utf-8")
 
-BUILD_VERSION.write_text("3.42.0\n", encoding="utf-8")
+BUILD_VERSION.write_text("3.43.0\n", encoding="utf-8")
 gradle = GRADLE.read_text(encoding="utf-8")
-gradle = replace_once(gradle, "versionCode 539", "versionCode 540", "Android version code")
-gradle = replace_once(gradle, "versionName '3.41.9'", "versionName '3.42.0'", "Android version name")
+gradle = replace_once(gradle, "versionCode 540", "versionCode 541", "Android version code")
+gradle = replace_once(gradle, "versionName '3.42.0'", "versionName '3.43.0'", "Android version name")
 GRADLE.write_text(gradle, encoding="utf-8")
+
+speed_test = PROJECT / "roadtools/speed_limit_handling_regression_test.py"
+speed_test.write_text('''#!/usr/bin/env python3
+"""Regression checks for trustworthy speed-limit selection and non-spam warnings."""
+from pathlib import Path
+ROOT = Path(__file__).resolve().parents[1]
+MAIN = (ROOT / "app/src/main/java/com/riccardo/roaddisplay/MainActivity.java").read_text(encoding="utf-8")
+ENGINE = (ROOT / "app/src/main/java/com/riccardo/roaddisplay/RoadEngine.java").read_text(encoding="utf-8")
+BUILD = (ROOT / "app/build.gradle").read_text(encoding="utf-8")
+checks = {
+    "local road match has priority over network cache": "if (best != null && bestScore <= 55.0 && bestLimit > 0) return bestLimit;" in ENGINE,
+    "network edge cache has a finite freshness window": "System.currentTimeMillis() - matchedAt >= 20000L" in ENGINE,
+    "network edge cache has a spatial bound": "matchedLocation.distanceTo(l) > 100.0f" in ENGINE,
+    "network edge cache rejects sharp heading changes": "delta > 55.0 && matchedLocation.distanceTo(l) > 12.0f" in ENGINE,
+    "speeding warning requires five continuous seconds": "nowMs - speedLimitOverSinceMs >= 5000L" in MAIN,
+    "repeat warning is rate limited to 120 seconds": "nowMs - lastSpeedLimitWarningAt >= 120000L" in MAIN,
+    "repeat timer resets after 30 seconds at legal speed": "nowMs - speedLimitBelowSinceMs >= 30000L" in MAIN,
+    "unknown speed limits are not synthesized": "return n >= 10 && n <= 160 ? n : 0;" in ENGINE and "currentSpeedLimitKmh = 0;" in MAIN,
+    "version is 3.43.0": "versionCode 541; versionName '3.43.0'" in BUILD,
+}
+for name, passed in checks.items():
+    print(("PASS " if passed else "FAIL ") + name)
+print(f"CHECKS={len(checks)} FAILURES={sum(not value for value in checks.values())}")
+raise SystemExit(0 if all(checks.values()) else 1)
+''', encoding="utf-8")
 
 new_test = PROJECT / "roadtools/map_matching_confidence_regression_test.py"
 new_test.write_text('''#!/usr/bin/env python3
@@ -121,5 +236,5 @@ print("Poor-accuracy fixes are down-weighted; high-accuracy confidence is preser
 ''', encoding="utf-8")
 
 print("ONLINE_NAV_PATCH=PASS")
-print("VERSION=3.42.0")
-print("CHANGED=frame-rate-independent marker smoothing; GNSS-quality-weighted map-matching confidence; targeted regression test")
+print("VERSION=3.43.0")
+print("CHANGED=frame-rate-independent marker smoothing; GNSS-aware map matching; speed-limit freshness and anti-spam warnings")
