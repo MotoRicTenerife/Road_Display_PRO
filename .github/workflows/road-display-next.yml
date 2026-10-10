@@ -1,0 +1,39 @@
+name: Road Display NEXT CI
+
+on:
+  push:
+    branches: [road-display-next-foundation]
+    paths:
+      - 'Road_Display_NEXT/**'
+      - '.github/workflows/road-display-next.yml'
+  pull_request:
+    paths:
+      - 'Road_Display_NEXT/**'
+      - '.github/workflows/road-display-next.yml'
+  workflow_dispatch:
+
+jobs:
+  test-and-build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Road_Display_NEXT
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+      - name: Unit tests
+        run: gradle testDebugUnitTest
+      - name: Android debug build
+        run: gradle assembleDebug
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: road-display-next-debug
+          path: Road_Display_NEXT/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
