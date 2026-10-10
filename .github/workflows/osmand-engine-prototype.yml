@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - 'next-navi-pro/osmand-engine-prototype'
+      - 'next-navi-pro/osmand-runtime-integration'
   pull_request:
     branches:
       - 'next-navi-pro/osmand-engine-prototype'
@@ -82,6 +83,10 @@ jobs:
             -Dorg.gradle.jvmargs='-Xmx3g -Xms512m -XX:MaxMetaspaceSize=1g -XX:+HeapDumpOnOutOfMemoryError' \
             -Pkotlin.daemon.jvmargs='-Xmx3g -Xms512m'
 
+      - name: Verify OsmAnd routing artifact structure
+        working-directory: ${{ github.workspace }}
+        run: python3 NEXT_NAVIPRO/verify_osmand_routing_artifact.py
+
       - name: Upload upstream routing build outputs for inspection
         if: success()
         uses: actions/upload-artifact@v4
@@ -90,5 +95,5 @@ jobs:
           path: |
             upstream/Osmand/OsmAnd-java/build/libs/*.jar
             upstream/Osmand/OsmAnd-java/build/outputs/**/*.jar
-          if-no-files-found: warn
+          if-no-files-found: error
           retention-days: 5
