@@ -194,6 +194,12 @@ engine = replace_once(
 )
 engine = replace_once(
     engine,
+    '    String matchedWayId = "";',
+    '    String matchedWayId = "";\n    String displayMatchedWayId = "";\n    long displayMatchedAt = 0L;',
+    "remember the last display-only road match for continuity",
+)
+engine = replace_once(
+    engine,
     "    volatile boolean crossCheckInFlight = false;",
     "    volatile boolean crossCheckInFlight = false;\n"
     "    volatile boolean roadFetchInFlight = false;\n"
@@ -331,8 +337,17 @@ engine = replace_once(
                     if (delta > 100.0 && distance > 8.0) continue;
                     score += delta * 0.22;
                 }
-                if (!matchedWayId.isEmpty() && matchedWayId.equals(way.id) && distance <= 24.0) score -= 5.0;""",
+                if (!displayMatchedWayId.isEmpty() && displayMatchedWayId.equals(way.id)
+                        && System.currentTimeMillis() - displayMatchedAt <= 15000L && distance <= 28.0) score -= 8.0;""",
     "heading-aware map-only road snap",
+)
+engine = replace_once(
+    engine,
+    "        if (bestWay == null || bestDistance > 22.0) return null;",
+    "        if (bestWay == null || bestDistance > 22.0) return null;\n"
+    "        displayMatchedWayId = bestWay.id == null ? \"\" : bestWay.id;\n"
+    "        displayMatchedAt = System.currentTimeMillis();",
+    "retain display road identity between fixes",
 )
 ENGINE.write_text(engine, encoding="utf-8")
 
