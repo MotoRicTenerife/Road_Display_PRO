@@ -91,7 +91,7 @@ for test_path in (PROJECT / "roadtools").glob("*_test.py"):
     test_text = test_text.replace("version 3.41.9", "version 3.42.0")
     test_path.write_text(test_text, encoding="utf-8")
 
-BUILD_VERSION.write_text("3.42.0\\n", encoding="utf-8")
+BUILD_VERSION.write_text("3.42.0\n", encoding="utf-8")
 gradle = GRADLE.read_text(encoding="utf-8")
 gradle = replace_once(gradle, "versionCode 539", "versionCode 540", "Android version code")
 gradle = replace_once(gradle, "versionName '3.41.9'", "versionName '3.42.0'", "Android version name")
