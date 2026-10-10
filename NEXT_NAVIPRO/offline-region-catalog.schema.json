@@ -1,0 +1,74 @@
+{
+  "schema_version": 1,
+  "product": "NEXT NAVI PRO",
+  "catalog_scope": "global",
+  "catalog_hierarchy": [
+    "continent",
+    "country",
+    "administrative_region",
+    "local_area"
+  ],
+  "region_selection": {
+    "multi_select": true,
+    "allow_independent_regions": true
+  },
+  "region_package_required_fields": [
+    "id",
+    "name",
+    "country_code",
+    "coverage",
+    "source_url",
+    "license",
+    "attribution",
+    "updated_at",
+    "sha256",
+    "size_bytes",
+    "format",
+    "capabilities"
+  ],
+  "package_capabilities": {
+    "rendering": {
+      "required": true
+    },
+    "offline_search": {
+      "required": true
+    },
+    "offline_routing": {
+      "required": true
+    },
+    "speed_limits": {
+      "required": false
+    },
+    "radar_poi": {
+      "required": false
+    },
+    "explicit_coverage_required": true
+  },
+  "package_lifecycle": {
+    "operations": [
+      "download",
+      "resume",
+      "pause",
+      "retry",
+      "verify_checksum",
+      "check_update",
+      "atomic_update",
+      "rollback",
+      "delete"
+    ],
+    "preserve_previous_valid_package_until_verified": true,
+    "require_free_space_check": true,
+    "show_installed_version_and_last_check": true
+  },
+  "reject_unknown_or_missing_checksums": true,
+  "example_source_policy": {
+    "required_scheme": "https",
+    "note": "Example policy only; actual providers must publish usable URLs, checksums, update dates and compatible package formats."
+  },
+  "safety_rules": [
+    "Never treat raw OSM PBF as a ready-to-render or ready-to-route package.",
+    "Do not silently claim offline routing/search/limits/radar when the installed package does not provide them.",
+    "Keep current working package active until replacement has passed integrity and compatibility checks.",
+    "Keep provider attribution and license metadata with each installed package."
+  ]
+}
