@@ -227,6 +227,22 @@ for test_path in (PROJECT / "roadtools").glob("*_test.py"):
     test_path.write_text(test_text, encoding="utf-8")
 
 BUILD_VERSION.write_text("3.43.0\n", encoding="utf-8")
+ride_test = PROJECT / "roadtools/speed_limit_ride_regression_test.py"
+ride_test.write_text('''from pathlib import Path
+p = Path(__file__).resolve().parents[0] / "../app/src/main/java/com/riccardo/roaddisplay/RoadEngine.java"
+s = p.read_text(encoding="utf-8")
+method = s[s.index("int speedLimitKmh(Location l)"):s.index("double distanceToSegmentMeters")]
+assert "RoadWay best = null;" in method
+assert "best = way;" in method
+assert "A geometrically matched road with no usable limit means" in method
+assert "return cachedNetworkSpeedLimit(l);" in method
+cache = s[s.index("int cachedNetworkSpeedLimit(Location l)"):s.index("double distanceToSegmentMeters")]
+assert "matchedLocation.distanceTo(l) > 100.0f" in cache
+assert "System.currentTimeMillis() - matchedAt >= 20000L" in cache
+assert "delta > 55.0" in cache
+print("speed-limit RIDE regression: PASS")
+''', encoding="utf-8")
+
 gradle = GRADLE.read_text(encoding="utf-8")
 gradle = replace_once(gradle, "versionCode 539", "versionCode 541", "Android version code")
 gradle = replace_once(gradle, "versionName '3.41.9'", "versionName '3.43.0'", "Android version name")
