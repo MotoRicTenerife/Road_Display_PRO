@@ -36,6 +36,28 @@ Riferimenti iniziali:
 - OsmAnd LICENSE: https://github.com/osmandapp/Osmand/blob/master/LICENSE
 - OSM attribution: https://www.openstreetmap.org/copyright
 
+## Priorità aggiornata — navigazione online prima delle mappe offline
+
+Su richiesta dell'utente, **non implementare né bloccare questa fase sul download delle mappe**. La navigazione online esistente è la base per il prossimo incremento; il catalogo offline rimane documentazione/contratto e viene rimandato.
+
+Ordine vincolante del prossimo incremento funzionale:
+
+1. **Posizione e freccia fluida:** distinguere posizione GNSS reale dal punto grafico interpolato; interpolare soltanto tra fix validi, usare timestamp e accuratezza, limitare velocità di animazione e ritardo, interrompere/interrompere il dead-reckoning quando il fix è vecchio o scarso. La grafica non deve mai essere usata come posizione da salvare o per generare avvisi.
+2. **Map matching e carreggiate parallele:** pesare accuratezza, distanza dalla strada candidata, direzione e continuità temporale; evitare cambi di strada per un singolo fix rumoroso; non forzare un candidato quando la confidenza è insufficiente. Verificare in particolare strade parallele, svincoli e inversioni.
+3. **Gestione della navigazione online:** avvio/stop/arrivo senza stati incoerenti; ricalcolo dopo deviazione credibile, non per jitter; mantenere percorso e frecce coerenti durante il ricalcolo; ETA basato sul percorso e sui limiti disponibili, senza traffico inventato; arrestare gli annunci di navigazione dopo l'arrivo.
+4. **Radar e POI:** mantenere il database/sorgente attuale e i relativi test; query spaziali efficienti; evitare annunci duplicati o ripetuti a ogni fix; direzione di marcia, distanza e accuratezza GNSS devono essere considerate; non perdere l'ultimo database valido se un aggiornamento fallisce; nessun radar inventato.
+5. **Voce e feedback:** preservare annunci in due fasi, svolte e rotonde, simboli destra/sinistra; evitare sovrapposizioni e ripetizioni; fallback esplicito quando GPS o dati stradali non sono affidabili.
+6. **Gate prima del test su strada:** eseguire l'intera suite esistente, aggiungere test mirati a interpolazione marker, perdita/ripresa GNSS, carreggiate parallele, ricalcolo e deduplicazione radar, poi build Android riuscita. I test sintetici non sostituiscono la prova sul Samsung S22 Ultra.
+
+### Criteri di accettazione per la fase online
+
+- Nessuna interpolazione grafica viene riutilizzata come fix GNSS o telemetria.
+- Un fix isolato non sposta la navigazione su una carreggiata parallela e non innesca da solo un ricalcolo.
+- Gli avvisi radar non vengono duplicati in modo continuo e non vengono mostrati quando posizione/direzione sono troppo incerte.
+- Stato di arrivo terminale: stop agli annunci di svolta e al ricalcolo automatico finché l'utente non avvia una nuova navigazione.
+- Le regressioni esistenti restano intatte; nessun test viene eliminato o indebolito per far passare la build.
+- Le mappe offline non fanno parte dei criteri di completamento di questa fase.
+
 ## Sequenza di lavoro obbligatoria
 
 ### Fase 1 — baseline riproducibile
