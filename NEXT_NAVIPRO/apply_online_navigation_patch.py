@@ -99,7 +99,7 @@ main = replace_once(
                 }""",
     "smooth marker short-horizon motion prediction",
 )
-main = main.replace("postInvalidateDelayed(50); // Smooth navigation marker while active.", "postInvalidateDelayed(33); // Keep the marker animation near 30 fps while active.")
+main = main.replace("postInvalidateDelayed((navigationActive||mapExpanded)?50:1000); // Smooth navigation marker while active.", "postInvalidateDelayed((navigationActive||mapExpanded)?33:1000); // Keep the marker animation near 30 fps while active.")
 MAIN.write_text(main, encoding="utf-8")
 # Improve speed-limit alert timing to avoid transient GPS-speed spikes and alert spam.
 old_fields = """    volatile int currentSpeedLimitKmh = 0;
@@ -163,7 +163,7 @@ test = replace_once(
     "    'marker smoothing is frame-rate independent': '1.0-Math.exp(-markerDt/(motorwaySpeed?0.12:0.20))' in main,\n"
     "    'bearing smoothing uses a time constant': 'bearingAlpha=1.0-Math.exp(-markerDt/(motorwaySpeed?0.10:0.18))' in main,\n"
     "    'marker predicts only a short horizon between GPS samples': 'Math.min(0.55, fixAgeMs / 1000.0)' in main and 'distanceAhead = location.getSpeed() * predictSeconds' in main,\n"
-    "    'active map animation refreshes near 30 fps': 'postInvalidateDelayed(33); // Keep the marker animation near 30 fps while active.' in main,",
+    "    'active map animation refreshes near 30 fps': 'postInvalidateDelayed((navigationActive||mapExpanded)?33:1000); // Keep the marker animation near 30 fps while active.' in main,",
     "marker smoothing regression assertions",
 )
 SMOOTH_TEST.write_text(test, encoding="utf-8")
