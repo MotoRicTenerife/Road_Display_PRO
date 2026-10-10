@@ -214,7 +214,9 @@ MATCHER.write_text(matcher, encoding="utf-8")
 # Keep every existing regression assertion aligned with the new app version.
 for test_path in (PROJECT / "roadtools").glob("*_test.py"):
     test_text = test_path.read_text(encoding="utf-8")
+    test_text = test_text.replace("versionCode 539; versionName '3.41.9'", "versionCode 541; versionName '3.43.0'")
     test_text = test_text.replace("versionCode 540; versionName '3.42.0'", "versionCode 541; versionName '3.43.0'")
+    test_text = test_text.replace("versionName '3.41.9'", "versionName '3.43.0'")
     test_text = test_text.replace("versionName '3.42.0'", "versionName '3.43.0'")
     test_text = test_text.replace("version is 3.42.0", "version is 3.43.0")
     test_text = test_text.replace("version 3.42.0", "version 3.43.0")
