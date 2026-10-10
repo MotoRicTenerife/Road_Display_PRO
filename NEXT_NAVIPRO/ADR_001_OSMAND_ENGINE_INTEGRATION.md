@@ -41,6 +41,27 @@ Keep display interpolation strictly render-only. It must never feed predicted co
 
 A working offline route engine requires compatible downloaded routing/map data and a lifecycle for installation, versioning, storage, updates and missing-region errors. A map display or cached tiles alone are not offline navigation. The app must report unavailable route data honestly and must not fabricate roads, speed limits, turns or ETAs.
 
+## Online/offline behavior contract (added 2026-10-10)
+
+The app must distinguish three independent capabilities instead of a single ambiguous "map available" flag:
+
+1. **Live Ride HUD without downloaded offline maps**: GPS speed and sensor values can still be shown. Online road attributes may be available only when the current network-backed road-data service returns verified data. If no trustworthy road data is returned, speed limit / road name / turn data must remain unknown; do not infer them from cached tiles or a nearby parallel road.
+2. **Online route navigation without offline maps**: technically possible only when a real online routing backend is configured and reachable, and the returned route geometry plus maneuvers are parsed and followed. This is not yet implemented/verified as an end-to-end OsmAnd integration in ROAD DISPLAY PRO. It requires internet connectivity and must report loss of service clearly.
+3. **Offline route navigation**: requires a compatible downloaded routing dataset that the selected engine can actually read. Raster tiles, a basemap, a raw OSM PBF, or a catalog entry alone do not satisfy this requirement. Missing/invalid/old data must block offline route calculation with an explicit status.
+
+### Required routing mode policy
+
+- Prefer an explicitly selected mode: **Online**, **Offline**, or **Automatic**.
+- In **Online**, do not silently claim offline fallback. If network routing fails, retain the current route only while its data remains valid and clearly report that recalculation is unavailable.
+- In **Offline**, never make network calls for route calculation; fail clearly if compatible local routing data are missing.
+- In **Automatic**, use offline routing only when a compatible local region is installed and validated; otherwise use online routing only if a real backend is configured and reachable. If neither is available, do not start turn-by-turn navigation.
+- GPS position and the speed display may continue in all modes; road-dependent guidance must not be fabricated.
+- Keep road snapping / display interpolation separate from the authoritative route-following coordinate.
+
+### Current no-offline-map answer
+
+Without offline maps, the current app can still launch and show GPS/sensor information, and some existing online road-data features may work when their services return valid data. **It cannot yet be represented as a fully verified turn-by-turn navigator without offline maps**, because a complete online route calculation + maneuver-following path has not been validated in this branch. A future online mode can work without downloaded maps, but only with a working online routing backend and connectivity. Offline navigation will still require compatible downloaded route data.
+
 ## Automated gate before asking for a road test
 
 - Clean Android build and installable debug APK.
