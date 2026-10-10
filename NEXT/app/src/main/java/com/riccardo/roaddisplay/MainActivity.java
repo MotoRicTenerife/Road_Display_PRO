@@ -27,6 +27,8 @@ public class MainActivity extends Activity {
     private LocationManager locationManager;
     private TextView statusView;
     private TextView accuracyView;
+    private TextView positionView;
+    private boolean locationUpdatesActive = false;
     private TextView speedView;
     private RideView rideView;
     private boolean demo = false;
@@ -54,7 +56,7 @@ public class MainActivity extends Activity {
             View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION);
         locationManager = (LocationManager) getSystemService(LOCATION_SERVICE);
         buildUi();
-        if (hasLocationPermission()) startLocation(); else requestPermissions(
+        if (!hasLocationPermission()) requestPermissions(
             new String[]{Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION},
             LOCATION_PERMISSION_REQUEST);
     }
@@ -66,7 +68,7 @@ public class MainActivity extends Activity {
         root.setPadding(dp(16), dp(10), dp(16), dp(12));
 
         TextView header = new TextView(this);
-        header.setText("ROAD DISPLAY  /  NEXT");
+        header.setText("NEXT NAVI");
         header.setTextColor(0xFFFFFF00);
         header.setTextSize(15);
         header.setTypeface(Typeface.DEFAULT_BOLD);
@@ -75,8 +77,10 @@ public class MainActivity extends Activity {
 
         statusView = makeLabel("GPS IN ATTESA", 0xFFFFD740, 14);
         accuracyView = makeLabel("ACCURATEZZA: —", 0xFFCCCCCC, 13);
+        positionView = makeLabel("POSIZIONE: IN ATTESA", 0xFFCCCCCC, 12);
         root.addView(statusView, new LinearLayout.LayoutParams(-1, dp(28)));
         root.addView(accuracyView, new LinearLayout.LayoutParams(-1, dp(25)));
+        root.addView(positionView, new LinearLayout.LayoutParams(-1, dp(24)));
 
         rideView = new RideView(this);
         root.addView(rideView, new LinearLayout.LayoutParams(-1, 0, 1f));
@@ -106,7 +110,7 @@ public class MainActivity extends Activity {
         buttons.addView(demoButton, new LinearLayout.LayoutParams(-2, dp(48)));
         root.addView(buttons, new LinearLayout.LayoutParams(-1, dp(54)));
 
-        TextView disclaimer = makeLabel("DATI STRADALI NON DISPONIBILI", 0xFFFFD740, 13);
+        TextView disclaimer = makeLabel("TEST GPS ATTIVO  •  NAVIGAZIONE E MAPPA IN SVILUPPO", 0xFFFFD740, 12);
         disclaimer.setGravity(Gravity.CENTER);
         root.addView(disclaimer, new LinearLayout.LayoutParams(-1, dp(28)));
         setContentView(root);
@@ -131,7 +135,7 @@ public class MainActivity extends Activity {
     }
 
     private void startLocation() {
-        if (!hasLocationPermission()) return;
+        if (!hasLocationPermission() || locationUpdatesActive) return;
         try {
             boolean requested = false;
             for (String provider : new String[]{LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER}) {
@@ -145,6 +149,7 @@ public class MainActivity extends Activity {
                 } catch (SecurityException ignored) { }
             }
             if (!requested) statusView.setText("GPS DISATTIVATO O NON DISPONIBILE");
+            locationUpdatesActive = requested;
             updateLocationUi();
         } catch (Exception e) {
             statusView.setText("ERRORE GPS — VERIFICARE I PERMESSI");
@@ -155,24 +160,43 @@ public class MainActivity extends Activity {
         if (demo || statusView == null) return;
         if (latestLocation == null) {
             statusView.setText("GPS IN ATTESA");
+            statusView.setTextColor(0xFFFFD740);
             accuracyView.setText("ACCURATEZZA: —");
+            positionView.setText("POSIZIONE: IN ATTESA DI FIX");
             speedView.setText("--");
             return;
         }
-        long age = Math.max(0, System.currentTimeMillis() - latestLocation.getTime());
-        if (age > 10000) {
-            statusView.setText("GPS OBSOLETO — IN ATTESA DI UN FIX");
-        } else if (!latestLocation.hasAccuracy() || latestLocation.getAccuracy() > 50f) {
-            statusView.setText("GPS INSUFFICIENTE");
-        } else {
-            statusView.setText("GPS OK");
-            statusView.setTextColor(0xFF8BC34A);
+        long now = System.currentTimeMillis();
+        long age = Math.max(0, now - latestLocation.getTime());
+        LocationFixQuality.State quality = LocationFixQuality.classify(
+            true, latestLocation.getTime(), now,
+            latestLocation.hasAccuracy(), latestLocation.hasAccuracy() ? latestLocation.getAccuracy() : Float.NaN);
+        switch (quality) {
+            case GOOD:
+                statusView.setText("GPS OK");
+                statusView.setTextColor(0xFF8BC34A);
+                break;
+            case STALE:
+                statusView.setText("GPS OBSOLETO — ATTESA DI FIX");
+                statusView.setTextColor(0xFFFF5252);
+                break;
+            case INACCURATE:
+                statusView.setText("GPS INSUFFICIENTE");
+                statusView.setTextColor(0xFFFFD740);
+                break;
+            default:
+                statusView.setText("GPS IN ATTESA");
+                statusView.setTextColor(0xFFFFD740);
         }
         accuracyView.setText(latestLocation.hasAccuracy()
-            ? String.format(Locale.ITALY, "ACCURATEZZA: ±%.0f m", latestLocation.getAccuracy())
-            : "ACCURATEZZA: NON DISPONIBILE");
-        if (age <= 10000 && latestLocation.hasSpeed()) {
-            speedView.setText(String.format(Locale.ITALY, "%.0f", latestLocation.getSpeed() * 3.6f));
+            ? String.format(Locale.ITALY, "ACCURATEZZA: ±%.0f m  •  FIX: %ds", latestLocation.getAccuracy(), age / 1000)
+            : String.format(Locale.ITALY, "ACCURATEZZA: NON DISPONIBILE  •  FIX: %ds", age / 1000));
+        String coords = String.format(Locale.ITALY, "%.5f, %.5f", latestLocation.getLatitude(), latestLocation.getLongitude());
+        String bearing = latestLocation.hasBearing()
+            ? String.format(Locale.ITALY, "  •  DIREZIONE %.0f°", latestLocation.getBearing()) : "";
+        positionView.setText("POSIZIONE: " + coords + bearing);
+        if (LocationFixQuality.mayDisplaySpeed(true, latestLocation.getTime(), now, latestLocation.hasSpeed())) {
+            speedView.setText(String.format(Locale.ITALY, "%.0f", LocationFixQuality.speedKmh(latestLocation)));
         } else speedView.setText("--");
         if (rideView != null) rideView.invalidate();
     }
@@ -193,6 +217,7 @@ public class MainActivity extends Activity {
     @Override protected void onPause() {
         if (locationManager != null) {
             try { locationManager.removeUpdates(listener); } catch (SecurityException ignored) {}
+            locationUpdatesActive = false;
         }
         super.onPause();
     }
