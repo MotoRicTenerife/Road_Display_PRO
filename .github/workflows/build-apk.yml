@@ -47,6 +47,20 @@ jobs:
             echo "::endgroup::"
           done
 
+      - name: Publish navigation source snapshot for integration review
+        working-directory: Road_Display_PRO
+        run: |
+          mkdir -p ../navigation-source-review
+          find app/src -type f \\( -name 'MainActivity.java' -o -name 'RouteMapMatcher.java' -o -name 'RoadEngine.java' -o -name '*Radar*.java' -o -name '*radar*.java' -o -name '*Navigation*.java' \\) -print
+          cp -R app/src/main/java ../navigation-source-review/java
+          cp -R roadtools ../navigation-source-review/roadtools
+      - name: Upload navigation source snapshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: navigation-source-review
+          path: navigation-source-review/
+          retention-days: 3
+
       - name: Ensure AndroidX is enabled
         working-directory: Road_Display_PRO
         run: |
