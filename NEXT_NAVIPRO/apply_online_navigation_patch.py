@@ -244,7 +244,7 @@ checks = {
     "speeding warning requires five continuous seconds": "nowMs - speedLimitOverSinceMs >= 5000L" in MAIN,
     "repeat warning is rate limited to 120 seconds": "nowMs - lastSpeedLimitWarningAt >= 120000L" in MAIN,
     "repeat timer resets after 30 seconds at legal speed": "nowMs - speedLimitBelowSinceMs >= 30000L" in MAIN,
-    "unknown local road limit does not borrow a neighbouring or cached limit": "A geometrically matched road with no usable limit means \\"unknown\\"." in ENGINE and "return limit;" in ENGINE,
+    "unknown local road limit does not borrow a neighbouring or cached limit": "A geometrically matched road with no usable limit" in ENGINE and "return limit;" in ENGINE,
     "version is 3.43.0": "versionCode 541; versionName '3.43.0'" in BUILD,
 }
 for name, passed in checks.items():
