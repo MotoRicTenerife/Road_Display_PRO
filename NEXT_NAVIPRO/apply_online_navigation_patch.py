@@ -60,7 +60,7 @@ main = replace_once(main, "    void processLocation(Location l) {\n        if (l
 main = replace_once(main, "for (Location l : result.getLocations()) processLocation(l);", "for (Location l : result.getLocations()) processLocation(l, true);", "fused callback source")
 main = replace_once(main, "if (l != null) processLocation(l);", "if (l != null) processLocation(l, true);", "fused cached source")
 main = replace_once(main, 'boolean isFused = fromFusedCallback || "fused".equals(provider);', 'boolean isFused = "fused".equals(provider);', "do not infer GPS quality from callback origin")
-accuracy_pattern = r"boolean hasReasonableAccuracy\s*=\s*l\.hasAccuracy\(\)\s*&&\s*l\.getAccuracy\(\)\s*<=\s*[^;]+;"
+accuracy_pattern = r"boolean hasReasonableAccuracy\s*=\s*[^;]+;"
 main, accuracy_replacements = re.subn(
     accuracy_pattern,
     "float providerAccuracyLimit = isFused ? 50f : GNSS_USABLE_ACCURACY_M;\\n"
