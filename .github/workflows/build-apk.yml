@@ -3,10 +3,14 @@ name: Build ROAD DISPLAY PRO APK
 
 on:
   workflow_dispatch:
+  pull_request:
+    branches:
+      - main
   push:
     branches:
       - main
       - master
+      - 'next-navi-pro/**'
 
 jobs:
   build:
@@ -16,11 +20,49 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Validate universal offline-region package contract
+        run: python3 NEXT_NAVIPRO/test_offline_catalog_contract.py
+
       - name: Extract project
         run: |
           unzip -o Road_Display_PRO_3.0.0.zip
           ls -la
           ls -la Road_Display_PRO
+
+      - name: Apply online navigation quality patch
+        run: python3 NEXT_NAVIPRO/apply_online_navigation_patch.py
+
+      - name: Verify baseline and run existing regression suite
+        working-directory: Road_Display_PRO
+        run: |
+          set -euo pipefail
+          test "$(tr -d '\r\n' < BUILD_VERSION.txt)" = "3.46.0"
+          grep -Fq "applicationId 'com.riccardo.roaddisplay'" app/build.gradle
+          grep -Fq "versionName '3.46.0'" app/build.gradle
+          echo "Verified application baseline: $(cat BUILD_VERSION.txt)"
+          test -d roadtools
+          test -f roadtools/navigation_voice_speed_map_regression_test.py
+          test -f roadtools/radar_system_regression_test.py
+          test -f roadtools/recent_user_feedback_regression_test.py
+          for test_file in roadtools/*_test.py; do
+            echo "::group::Regression: $test_file"
+            python3 "$test_file"
+            echo "::endgroup::"
+          done
+
+      - name: Publish navigation source snapshot for integration review
+        working-directory: Road_Display_PRO
+        run: |
+          mkdir -p ../navigation-source-review
+          find app/src -type f -name '*.java' -print
+          cp -R app/src/main/java ../navigation-source-review/java
+          cp -R roadtools ../navigation-source-review/roadtools
+      - name: Upload navigation source snapshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: navigation-source-review
+          path: navigation-source-review/
+          retention-days: 3
 
       - name: Ensure AndroidX is enabled
         working-directory: Road_Display_PRO
@@ -58,5 +100,5 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: road-display-pro-3.0.0-debug
+          name: next-navi-pro-speed-limits-3.46.0-debug
           path: Road_Display_PRO/app/build/outputs/apk/debug/app-debug.apk
