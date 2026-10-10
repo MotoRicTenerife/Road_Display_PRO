@@ -1,0 +1,94 @@
+name: OsmAnd engine prototype gate
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - 'next-navi-pro/osmand-engine-prototype'
+  pull_request:
+    branches:
+      - 'next-navi-pro/osmand-engine-prototype'
+      - 'next-navi-pro/osmand-engine-integration'
+
+permissions:
+  contents: read
+
+jobs:
+  upstream-engine-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout ROAD DISPLAY PRO integration branch
+        uses: actions/checkout@v4
+
+      - name: Set pinned upstream revision
+        id: pin
+        shell: bash
+        run: |
+          echo 'revision=cacaa5fe1499af8806210de6f81293f925847043' >> "$GITHUB_OUTPUT"
+
+      - name: Checkout pinned OsmAnd source
+        uses: actions/checkout@v4
+        with:
+          repository: osmandapp/Osmand
+          ref: cacaa5fe1499af8806210de6f81293f925847043
+          path: upstream/Osmand
+          fetch-depth: 1
+
+      - name: Checkout OsmAnd resources required by the Java engine build
+        uses: actions/checkout@v4
+        with:
+          repository: osmandapp/OsmAnd-resources
+          ref: master
+          path: upstream/resources
+          fetch-depth: 1
+
+      - name: Verify source pin and license
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C upstream/Osmand rev-parse HEAD)" = "cacaa5fe1499af8806210de6f81293f925847043"
+          test -s upstream/Osmand/LICENSE
+          grep -qi 'GNU GENERAL PUBLIC LICENSE' upstream/Osmand/LICENSE
+          echo "Pinned OsmAnd source: $(git -C upstream/Osmand rev-parse HEAD)"
+          echo "License header verified; this is a source/build gate, not an app integration claim."
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-36 build-tools;36.0.0'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+
+      - name: Build OsmAnd Java routing artifact
+        working-directory: upstream/Osmand
+        shell: bash
+        run: |
+          set -euo pipefail
+          # OsmAnd-java expects the resources checkout at ../resources.
+          ln -sfn "$GITHUB_WORKSPACE/upstream/resources" "$GITHUB_WORKSPACE/resources"
+          # The upstream shared Kotlin module exceeded the runner's default daemon heap.
+          # Give Gradle/Kotlin explicit heaps and limit workers to avoid concurrent compiler OOM.
+          gradle :OsmAnd-java:androidJar --no-daemon --stacktrace --max-workers=2 \
+            -Dorg.gradle.jvmargs='-Xmx3g -Xms512m -XX:MaxMetaspaceSize=1g -XX:+HeapDumpOnOutOfMemoryError' \
+            -Pkotlin.daemon.jvmargs='-Xmx3g -Xms512m'
+
+      - name: Upload upstream routing build outputs for inspection
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: osmand-java-routing-prototype
+          path: |
+            upstream/Osmand/OsmAnd-java/build/libs/*.jar
+            upstream/Osmand/OsmAnd-java/build/outputs/**/*.jar
+          if-no-files-found: warn
+          retention-days: 5
