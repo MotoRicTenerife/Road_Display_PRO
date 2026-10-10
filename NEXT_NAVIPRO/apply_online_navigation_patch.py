@@ -220,6 +220,10 @@ for test_path in (PROJECT / "roadtools").glob("*_test.py"):
     test_text = test_text.replace("versionName '3.42.0'", "versionName '3.43.0'")
     test_text = test_text.replace("version is 3.42.0", "version is 3.43.0")
     test_text = test_text.replace("version 3.42.0", "version 3.43.0")
+    test_text = test_text.replace("'return best == null || bestScore > 55.0 ? 0 : bestLimit;' in engine,", "'if (best != null && bestScore <= 55.0)' in engine and 'return limit;' in engine,")
+    test_text = test_text.replace("'matchedLocation.distanceTo(l) <= 150.0f' in s", "'matchedLocation.distanceTo(l) > 100.0f' in s")
+    test_text = test_text.replace("'System.currentTimeMillis()-matchedAt < 30000L' in s", "'System.currentTimeMillis() - matchedAt >= 20000L' in s")
+    test_text = test_text.replace('needle = "if (ways == null || ways.isEmpty()) return 0;"', 'needle = "return cachedNetworkSpeedLimit(l);"')
     test_path.write_text(test_text, encoding="utf-8")
 
 BUILD_VERSION.write_text("3.43.0\n", encoding="utf-8")
