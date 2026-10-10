@@ -1,11 +1,13 @@
-# NEXT NAVI — Alpha 2 (GPS test build)
+# NEXT NAVI — Alpha 5 (GPS test build)
 
 This branch now produces an installable Android debug APK for real-device GPS testing. It is an early engineering build, not yet a complete navigation app.
 
-## Included in Alpha 2
+## Included in Alpha 5
 - App name and launcher label: **NEXT NAVI**
 - Full-screen, keep-screen-on ride display
 - Live Android location updates with permission handling
+- OpenStreetMap tile map preview with current GPS marker
+- Interpolated marker movement between GPS fixes and recentering near map edges
 - Current speed only when a recent speed-bearing fix exists
 - GPS state: waiting, stale, inaccurate, or good
 - Display of horizontal accuracy, fix age, latitude/longitude, and bearing when Android provides it
