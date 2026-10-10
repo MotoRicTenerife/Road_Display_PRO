@@ -58,7 +58,15 @@ main = replace_once(
 main = replace_once(main, "    void processLocation(Location l) {\n        if (l == null) return;", "    void processLocation(Location l) {\n        processLocation(l, false);\n    }\n\n    void processLocation(Location l, boolean fromFusedCallback) {\n        if (l == null) return;", "fused provider-aware location processing")
 main = replace_once(main, "for (Location l : result.getLocations()) processLocation(l);", "for (Location l : result.getLocations()) processLocation(l, true);", "fused callback source")
 main = replace_once(main, "if (l != null) processLocation(l);", "if (l != null) processLocation(l, true);", "fused cached source")
-main = replace_once(main, 'boolean isFused = "fused".equals(provider);', 'boolean isFused = fromFusedCallback || "fused".equals(provider);', "fused provider recognition")
+main = replace_once(main, 'boolean isFused = fromFusedCallback || "fused".equals(provider);', 'boolean isFused = "fused".equals(provider);', "do not infer GPS quality from callback origin")
+main = replace_once(
+    main,
+    "        boolean hasReasonableAccuracy = l.hasAccuracy() && l.getAccuracy() <= GNSS_USABLE_ACCURACY_M;",
+    "        float providerAccuracyLimit = isFused ? 50f : GNSS_USABLE_ACCURACY_M;\n"
+    "        boolean hasReasonableAccuracy = l.hasAccuracy() && Float.isFinite(l.getAccuracy())\n"
+    "                && l.getAccuracy() <= providerAccuracyLimit;",
+    "provider-specific location accuracy gate",
+)
 main = replace_once(main, "        boolean usableGps = (isPlatformGnss || isFused) && hasReasonableAccuracy\n                && locationAgeMs <= GNSS_USABLE_MAX_AGE_MS;", "        boolean usableGps = (isPlatformGnss || isFused) && hasReasonableAccuracy\n                && locationAgeMs <= GNSS_USABLE_MAX_AGE_MS;\n        if (!isPlatformGnss && !isFused && lastUsableGpsAt != 0L\n                && nowMs - lastUsableGpsAt <= GNSS_LOSS_TIMEOUT_MS) return;", "ignore fallback provider over live GNSS")
 MAIN.write_text(main, encoding="utf-8")
 main = replace_once(
@@ -422,7 +430,8 @@ checks = {
     "repeat timer resets after 30 seconds at legal speed": "nowMs - speedLimitBelowSinceMs >= 30000L" in MAIN,
     "cached edge limit is accepted only for the same matched OSM way": "best.id.equals(matchedWayId)" in ENGINE and "return cachedNetworkSpeedLimit(l);" in ENGINE,
     "fallback network callbacks cannot erase a recent GNSS limit": "nowMs - lastUsableGpsAt <= GNSS_LOSS_TIMEOUT_MS) return;" in MAIN,
-    "Fused Location callbacks are explicitly trusted as fused": "processLocation(l, true)" in MAIN and '"fused".equals(provider)' in MAIN,
+    "callback origin alone does not promote a fix to GNSS": 'boolean isFused = "fused".equals(provider);' in MAIN and "fromFusedCallback ||" not in MAIN,
+    "fused-provider fixes use a stricter 50 m accuracy gate": "float providerAccuracyLimit = isFused ? 50f : GNSS_USABLE_ACCURACY_M;" in MAIN and "l.getAccuracy() <= providerAccuracyLimit" in MAIN,
     "moderate usable GNSS refreshes roads before limit lookup": "engine.update(l);\\n                currentSpeedLimitKmh = engine.speedLimitKmh(l);" in MAIN,
     "GPS holdover does not expire after a single brief gap": "GNSS_LOSS_TIMEOUT_MS = 40000L" in MAIN,
     "live GPS update triggers OSM road data fetch": "requestRoadDataFetch(l);" in ENGINE,
