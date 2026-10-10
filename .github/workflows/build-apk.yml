@@ -29,6 +29,9 @@ jobs:
           ls -la
           ls -la Road_Display_PRO
 
+      - name: Apply online navigation quality patch
+        run: python3 NEXT_NAVIPRO/apply_online_navigation_patch.py
+
       - name: Verify baseline and run existing regression suite
         working-directory: Road_Display_PRO
         run: |
