@@ -39,6 +39,6 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: next-navi-alpha4-debug
+          name: next-navi-alpha5-debug
           path: NEXT/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
