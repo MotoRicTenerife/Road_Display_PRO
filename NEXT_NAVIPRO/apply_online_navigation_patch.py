@@ -124,23 +124,62 @@ test = replace_once(
 SMOOTH_TEST.write_text(test, encoding="utf-8")
 
 
-# Prefer the local OSM geometry match to a cached network edge, especially at junctions.
+# Match geometry first, including roads with unknown limits, so an adjacent road's
+# limit can never be borrowed merely because the current road has no maxspeed tag.
 engine = ENGINE.read_text(encoding="utf-8")
-old_cache = """        if(!matchedWayId.isEmpty() && matchedSpeedLimitKmh>0 && matchedLocation!=null
-                && System.currentTimeMillis()-matchedAt < 30000L
-                && matchedLocation.distanceTo(l) <= 150.0f){
-            return matchedSpeedLimitKmh;
+method_start = engine.index("    int speedLimitKmh(Location l) {")
+method_end = engine.index("    double distanceToSegmentMeters", method_start)
+new_method = """    int speedLimitKmh(Location l) {
+        if (l == null) return 0;
+        RoadWay best = null;
+        double bestScore = Double.MAX_VALUE;
+        double bestDelta = Double.NaN;
+        double bestDistance = Double.MAX_VALUE;
+        boolean hasUsableHeading = l.hasBearing() && l.hasSpeed() && l.getSpeed() >= 3f;
+        if (ways != null) {
+            for (RoadWay way : ways) {
+                if (way.pts == null || way.pts.size() < 2) continue;
+                for (int i = 0; i + 1 < way.pts.size(); i++) {
+                    Geo a = way.pts.get(i), b = way.pts.get(i + 1);
+                    double d = distanceToSegmentMeters(l.getLatitude(), l.getLongitude(), a, b);
+                    if (d > 70.0) continue;
+                    double segmentBearing = bearing(a, b);
+                    double delta = Double.NaN;
+                    double headingPenalty = 0.0;
+                    if (hasUsableHeading) {
+                        delta = Math.abs(normalizeAngle(segmentBearing - l.getBearing()));
+                        delta = Math.min(delta, 360.0 - delta);
+                        headingPenalty = delta * 0.30;
+                        if (delta > 105.0 && d > 18.0) continue;
+                    }
+                    double score = d + headingPenalty;
+                    if (score < bestScore) {
+                        bestScore = score;
+                        bestDistance = d;
+                        best = way;
+                        bestDelta = delta;
+                    }
+                }
+            }
         }
-        if (ways == null || ways.isEmpty()) return 0;"""
-new_cache = """        if (ways == null || ways.isEmpty()) return cachedNetworkSpeedLimit(l);"""
-engine = replace_once(engine, old_cache, new_cache, "local limit takes priority over cached network edge")
-old_return = """        return best == null || bestScore > 55.0 ? 0 : bestLimit;
-    }
-
-    double distanceToSegmentMeters"""
-new_return = """        if (best != null && bestScore <= 55.0 && bestLimit > 0) return bestLimit;
-        // Network correlation is a fallback only: never let an old edge override
-        // a current local geometry match at a junction or parallel carriageway.
+        if (best != null && bestScore <= 55.0) {
+            int limit = 0;
+            if (hasUsableHeading && Double.isFinite(bestDelta)) {
+                if (bestDelta > 90.0) {
+                    limit = parseSpeedLimit(best.maxspeedBackward);
+                    if (limit <= 0) limit = parseSpeedLimit(best.maxspeed);
+                } else {
+                    limit = parseSpeedLimit(best.maxspeedForward);
+                    if (limit <= 0) limit = parseSpeedLimit(best.maxspeed);
+                }
+            } else {
+                // Without a reliable direction, only a non-directional maxspeed is safe.
+                limit = parseSpeedLimit(best.maxspeed);
+            }
+            // A geometrically matched road with no usable limit means "unknown".
+            // Do not borrow a neighbouring road's limit or a stale network edge.
+            return limit;
+        }
         return cachedNetworkSpeedLimit(l);
     }
 
@@ -155,8 +194,8 @@ new_return = """        if (best != null && bestScore <= 55.0 && bestLimit > 0) 
         return matchedSpeedLimitKmh;
     }
 
-    double distanceToSegmentMeters"""
-engine = replace_once(engine, old_return, new_return, "network speed limit fallback")
+"""
+engine = engine.substring(0, method_start) + new_method + engine.substring(method_end);
 ENGINE.write_text(engine, encoding="utf-8")
 
 matcher = MATCHER.read_text(encoding="utf-8")
@@ -196,14 +235,14 @@ MAIN = (ROOT / "app/src/main/java/com/riccardo/roaddisplay/MainActivity.java").r
 ENGINE = (ROOT / "app/src/main/java/com/riccardo/roaddisplay/RoadEngine.java").read_text(encoding="utf-8")
 BUILD = (ROOT / "app/build.gradle").read_text(encoding="utf-8")
 checks = {
-    "local road match has priority over network cache": "if (best != null && bestScore <= 55.0 && bestLimit > 0) return bestLimit;" in ENGINE,
+    "geometry is selected before checking limit availability": "best = way;" in ENGINE and "return limit;" in ENGINE,
     "network edge cache has a finite freshness window": "System.currentTimeMillis() - matchedAt >= 20000L" in ENGINE,
     "network edge cache has a spatial bound": "matchedLocation.distanceTo(l) > 100.0f" in ENGINE,
     "network edge cache rejects sharp heading changes": "delta > 55.0 && matchedLocation.distanceTo(l) > 12.0f" in ENGINE,
     "speeding warning requires five continuous seconds": "nowMs - speedLimitOverSinceMs >= 5000L" in MAIN,
     "repeat warning is rate limited to 120 seconds": "nowMs - lastSpeedLimitWarningAt >= 120000L" in MAIN,
     "repeat timer resets after 30 seconds at legal speed": "nowMs - speedLimitBelowSinceMs >= 30000L" in MAIN,
-    "unknown speed limits are not synthesized": "return n >= 10 && n <= 160 ? n : 0;" in ENGINE and "currentSpeedLimitKmh = 0;" in MAIN,
+    "unknown local road limit does not borrow a neighbouring or cached limit": "A geometrically matched road with no usable limit means \\"unknown\\"." in ENGINE and "return limit;" in ENGINE,
     "version is 3.43.0": "versionCode 541; versionName '3.43.0'" in BUILD,
 }
 for name, passed in checks.items():
