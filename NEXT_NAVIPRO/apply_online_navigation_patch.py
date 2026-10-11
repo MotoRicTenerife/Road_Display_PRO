@@ -23,6 +23,8 @@ OSMAND_ROUTER = PROJECT / "app/src/main/java/com/riccardo/roaddisplay/OsmAndOffl
 OSMAND_ROUTER_TEMPLATE = ROOT / "NEXT_NAVIPRO/templates/OsmAndOfflineRouter.java"
 PLATFORM_SHIM = PROJECT / "app/src/main/java/net/osmand/PlatformUtil.java"
 PLATFORM_SHIM_TEMPLATE = ROOT / "NEXT_NAVIPRO/templates/PlatformUtil.java"
+OFFLINE_RENDERER = PROJECT / "app/src/main/java/com/riccardo/roaddisplay/OsmAndOfflineMapRenderer.java"
+OFFLINE_RENDERER_TEMPLATE = ROOT / "NEXT_NAVIPRO/templates/OsmAndOfflineMapRenderer.java"
 
 def replace_once(text: str, old: str, new: str, label: str) -> str:
     count = text.count(old)
@@ -32,7 +34,7 @@ def replace_once(text: str, old: str, new: str, label: str) -> str:
         raise RuntimeError(f"{label}: expected exactly one baseline match, got {count}")
     return text.replace(old, new, 1)
 
-for template in (MAP_MANAGER_TEMPLATE, OSMAND_ROUTER_TEMPLATE, PLATFORM_SHIM_TEMPLATE):
+for template in (MAP_MANAGER_TEMPLATE, OSMAND_ROUTER_TEMPLATE, PLATFORM_SHIM_TEMPLATE, OFFLINE_RENDERER_TEMPLATE):
     if not template.is_file():
         raise RuntimeError(f"Missing required OsmAnd integration template: {template}")
 MAP_MANAGER.parent.mkdir(parents=True, exist_ok=True)
@@ -41,6 +43,7 @@ PLATFORM_SHIM.parent.mkdir(parents=True, exist_ok=True)
 shutil.copyfile(MAP_MANAGER_TEMPLATE, MAP_MANAGER)
 shutil.copyfile(OSMAND_ROUTER_TEMPLATE, OSMAND_ROUTER)
 shutil.copyfile(PLATFORM_SHIM_TEMPLATE, PLATFORM_SHIM)
+shutil.copyfile(OFFLINE_RENDERER_TEMPLATE, OFFLINE_RENDERER)
 
 # Attach the OsmAnd Java engine and its runtime support libraries to the archived app build.
 gradle = GRADLE.read_text(encoding="utf-8")
@@ -80,6 +83,8 @@ if missing_dependencies:
     GRADLE.write_text(gradle, encoding="utf-8")
 
 main = MAIN.read_text(encoding="utf-8")
+main = replace_once(main, "    volatile boolean vectorMapFailed = false;", "    volatile boolean vectorMapFailed = false;\n    OsmAndOfflineMapRenderer offlineMapRenderer;", "offline OBF renderer state")
+main = replace_once(main, "        view = new RideView(this);", "        view = new RideView(this);\n        offlineMapRenderer = new OsmAndOfflineMapRenderer(this);", "initialize offline OBF renderer")
 
 # Add an honest, compact source badge over the shared map/HUD surface.
 # MapLibre currently renders the visible cartography online; choosing OsmAnd
@@ -136,6 +141,52 @@ class_end = main.rfind("\n}")
 if class_end < 0:
     raise RuntimeError("map source status badge: MainActivity class end not found")
 main = main[:class_end] + "\n" + badge_code + main[class_end:]
+# When local OsmAnd OBF files exist, use the offline vector renderer on all Canvas maps
+# and suppress MapLibre/raster network cartography. Routing mode remains independent.
+main = replace_once(main,
+    """    void setVectorMapExpanded(boolean expanded) {
+        if (vectorMapView == null) return;
+        try {
+            vectorMapView.setVisibility(expanded && vectorMapReady ? View.VISIBLE : View.GONE);
+            if (expanded && vectorMapReady) syncVectorMapCamera(false);
+        } catch (Throwable ignored) {}
+    }""",
+    """    void setVectorMapExpanded(boolean expanded) {
+        if (vectorMapView == null) return;
+        try {
+            boolean localObfCartography = OsmAndOfflineRouter.hasInstalledMaps(this);
+            vectorMapView.setVisibility(expanded && vectorMapReady && !localObfCartography ? View.VISIBLE : View.GONE);
+            if (expanded && vectorMapReady && !localObfCartography) syncVectorMapCamera(false);
+        } catch (Throwable ignored) {}
+    }""", "hide online map when OBF cartography exists")
+main = replace_once(main,
+    "float renderBearing=expanded?mapFrozenBearing:(!Float.isNaN(navigationMatchedBearing)?navigationMatchedBearing:(hasMapBearing?mapBearing:0f));double angle=Math.toRadians(renderBearing);",
+    "float renderBearing=expanded?mapFrozenBearing:(!Float.isNaN(navigationMatchedBearing)?navigationMatchedBearing:(hasMapBearing?mapBearing:0f));\n            if (OsmAndOfflineRouter.hasInstalledMaps(MainActivity.this) && offlineMapRenderer != null) {\n                offlineMapRenderer.draw(c, bounds, lat, lon, zoom, renderBearing, scale, density);\n                return true; // Local OBF is the cartographic source; never silently fetch raster tiles.\n            }\n            double angle=Math.toRadians(renderBearing);",
+    "offline OBF renderer takes precedence over network tiles")
+main = replace_once(main,
+    "        if (view != null) view.releaseTiles();",
+    "        if (view != null) view.releaseTiles();\n        if (offlineMapRenderer != null) offlineMapRenderer.close();",
+    "close offline OBF renderer")
+# Keep the visual source badge truthful independently of the route engine selected.
+main = replace_once(main,
+    """        ((android.widget.TextView) view).setText("CARTINA ONLINE · " + route);
+        ((android.widget.TextView) view).setContentDescription("Cartografia online MapLibre; modalità percorso: " + route);""",
+    """        boolean localObf = OsmAndOfflineRouter.hasInstalledMaps(this);
+        ((android.widget.TextView) view).setText((localObf ? "CARTINA OSMAND OFFLINE · " : "CARTINA ONLINE · ") + route);
+        ((android.widget.TextView) view).setContentDescription((localObf ? "Cartografia vettoriale OsmAnd offline" : "Cartografia online MapLibre") + "; modalità percorso: " + route);""",
+    "truthful offline cartography source badge")
+main = replace_once(main,
+    "    private float mapBadgeDp(float value) {",
+    """    void onOfflineMapsChanged() {
+        refreshMapSourceStatusBadge();
+        if (view != null) {
+            if (view.mapExpanded) setVectorMapExpanded(true);
+            view.postInvalidate();
+        }
+    }
+
+    private float mapBadgeDp(float value) {""",
+    "refresh map UI after OBF install/delete")
 # Match the visual map rotation to the user's two-finger gesture. The map renderer
 # rotates its content by -bearing, so bearing must move opposite to the finger angle.
 main = replace_once(
