@@ -2,7 +2,7 @@
 
 **Status: upstream build verified; NEXT NAVI PRO customization is in progress.**
 
-The official OsmAnd baseline has now compiled successfully in GitHub Actions. The next build targets ARM64 for the Samsung S22 Ultra and changes the launcher label to NEXT NAVI PRO. Map rendering and real-device navigation still require runtime validation; the baseline build alone is not proof of those tests.
+The official OsmAnd baseline has compiled successfully in GitHub Actions. This iteration targets ARM64 for the Samsung S22 Ultra and changes the launcher label to NEXT NAVI PRO. Map rendering and real-device navigation still require runtime validation; the baseline build alone is not proof of those tests.
 
 The new direction is to use the official OsmAnd Android application as the navigation foundation and build NEXT NAVI PRO's own riding/driving interface around it. The previous attempt to embed isolated routing pieces in ROAD DISPLAY PRO is not the baseline for this rebuild.
 
