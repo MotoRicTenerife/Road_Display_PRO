@@ -78,6 +78,7 @@ jobs:
             for dir in android resources core core-legacy build tools misc; do
               echo "$dir: $(git -C "$dir" rev-parse HEAD)"
             done
+            java -version 2>&1
           } | tee upstream-revisions.txt
 
       - name: Set up JDK
@@ -96,7 +97,10 @@ jobs:
 
       - name: Build official OsmAnd debug APK
         working-directory: android
-        run: ./gradlew --no-daemon --stacktrace assembleNightlyFreeLegacyFatDebug
+        shell: bash
+        run: |
+          set -o pipefail
+          ./gradlew --no-daemon --stacktrace assembleNightlyFreeLegacyFatDebug 2>&1 | tee ../gradle-build.log
 
       - name: Verify APK exists
         shell: bash
@@ -104,12 +108,22 @@ jobs:
           find android/OsmAnd/build/outputs/apk -type f -name '*.apk' -print
           test -n "$(find android/OsmAnd/build/outputs/apk -type f -name '*.apk' -print -quit)"
 
-      - name: Upload debug APK and build provenance
+      - name: Upload build diagnostics (always)
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: next-navi-pro-build-diagnostics-${{ github.run_number }}
+          path: |
+            gradle-build.log
+            upstream-revisions.txt
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Upload debug APK
+        if: success()
         uses: actions/upload-artifact@v6
         with:
           name: next-navi-pro-osmand-baseline-${{ github.run_number }}
-          path: |
-            android/OsmAnd/build/outputs/apk/**/*.apk
-            upstream-revisions.txt
+          path: android/OsmAnd/build/outputs/apk/**/*.apk
           if-no-files-found: error
           retention-days: 30
