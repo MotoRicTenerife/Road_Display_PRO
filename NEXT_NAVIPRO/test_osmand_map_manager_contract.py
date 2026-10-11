@@ -22,7 +22,7 @@ required_template = (
     "ZipInputStream",
     "setConnectTimeout",
     "setReadTimeout",
-    "OsmAnd route engine is wired",
+    "must not claim offline navigation",
     "OsmAnd tenterà il routing offline",
 )
 template_lower = template.lower()
