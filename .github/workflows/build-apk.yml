@@ -58,10 +58,11 @@ jobs:
         run: |
           set -euo pipefail
           ln -sfn "$GITHUB_WORKSPACE/upstream/resources" "$GITHUB_WORKSPACE/resources"
-          gradle :OsmAnd-java:androidJar --no-daemon --stacktrace --max-workers=2 \
+          gradle :OsmAnd-shared:bundleDebugAar :OsmAnd-java:androidJar --no-daemon --stacktrace --max-workers=2 \
             -Dorg.gradle.jvmargs='-Xmx3g -Xms512m -XX:MaxMetaspaceSize=1g' \
             -Pkotlin.daemon.jvmargs='-Xmx3g -Xms512m'
           test -s OsmAnd-java/build/libs/OsmAnd-java-android-master-snapshot-android.jar
+          test -s OsmAnd-shared/build/outputs/aar/OsmAnd-shared-debug.aar
           mkdir -p "$GITHUB_WORKSPACE/osmand-routing-libraries"
           cp OsmAnd-java/build/libs/OsmAnd-java-android-master-snapshot-android.jar "$GITHUB_WORKSPACE/osmand-routing-libraries/"
           find OsmAnd-shared/build/libs -maxdepth 1 -type f -name '*.jar' -exec cp {} "$GITHUB_WORKSPACE/osmand-routing-libraries/" \;
@@ -72,7 +73,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: osmand-routing-libraries
-          path: osmand-routing-libraries/*.jar
+          path: osmand-routing-libraries/*
           if-no-files-found: error
           retention-days: 3
 
