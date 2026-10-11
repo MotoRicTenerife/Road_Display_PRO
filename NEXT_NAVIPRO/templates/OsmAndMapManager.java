@@ -14,12 +14,15 @@ import android.widget.LinearLayout;
 import android.widget.ListView;
 import android.widget.TextView;
 
+import net.osmand.binary.BinaryMapIndexReader;
+
 import java.io.BufferedInputStream;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.io.RandomAccessFile;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.net.URLEncoder;
@@ -63,8 +66,12 @@ public final class OsmAndMapManager {
         }
         String label(File mapsDir) {
             String obf = fileName.substring(0, fileName.length() - 4);
-            return (new File(mapsDir, obf).isFile() ? "✓ " : "↓ ")
-                    + humanName(fileName) + " · " + sizeMb + " MB · " + updated;
+            File installed = new File(mapsDir, obf);
+            if (!installed.isFile()) return "↓ " + humanName(fileName) + " · " + sizeMb + " MB · " + updated;
+            String installedVersion = readInstalledVersion(new File(mapsDir, obf + ".version"));
+            if (installedVersion == null) return "✓ " + humanName(fileName) + " · installata (versione non registrata) · catalogo " + updated;
+            if (!installedVersion.equals(updated)) return "↻ " + humanName(fileName) + " · AGGIORNAMENTO DISPONIBILE · " + updated;
+            return "✓ " + humanName(fileName) + " · aggiornata · " + updated;
         }
     }
 
@@ -92,7 +99,19 @@ public final class OsmAndMapManager {
         status.setTextSize(13f);
         root.addView(status, new LinearLayout.LayoutParams(-1, dp(context, 44)));
         ListView list = new ListView(context);
-        root.addView(list, new LinearLayout.LayoutParams(-1, dp(context, 300)));
+        root.addView(list, new LinearLayout.LayoutParams(-1, dp(context, 260)));
+        LinearLayout actions = new LinearLayout(context);
+        actions.setOrientation(LinearLayout.HORIZONTAL);
+        Button deleteButton = new Button(context);
+        deleteButton.setText("ELIMINA");
+        Button verifyButton = new Button(context);
+        verifyButton.setText("VERIFICA");
+        Button updatesButton = new Button(context);
+        updatesButton.setText("CERCA AGGIORNAMENTI");
+        actions.addView(deleteButton, new LinearLayout.LayoutParams(0, dp(context, 48), 1f));
+        actions.addView(verifyButton, new LinearLayout.LayoutParams(0, dp(context, 48), 1f));
+        actions.addView(updatesButton, new LinearLayout.LayoutParams(0, dp(context, 48), 1f));
+        root.addView(actions, new LinearLayout.LayoutParams(-1, dp(context, 52)));
         TextView note = new TextView(context);
         note.setText("I file .obf contengono dati vettoriali stradali. Il download, da solo, non attiva il routing offline: il motore OsmAnd deve calcolare un percorso reale. Dati cartografici © OpenStreetMap contributors (ODbL); pacchetti distribuiti da OsmAnd.");
         note.setTextSize(12f);
@@ -125,16 +144,76 @@ public final class OsmAndMapManager {
             selected[0] = -1;
             status.setText(visible.size() + " mappe nel filtro · installate: " + installedCount(mapsDir));
         };
+        deleteButton.setOnClickListener(v -> {
+            if (selected[0] < 0 || selected[0] >= visible.size()) {
+                status.setText("Seleziona prima una mappa installata da eliminare.");
+                return;
+            }
+            MapItem item = visible.get(selected[0]);
+            String obfName = item.fileName.substring(0, item.fileName.length() - 4);
+            File installed = new File(mapsDir, obfName);
+            if (!installed.isFile()) {
+                status.setText("La mappa selezionata non è installata.");
+                return;
+            }
+            new AlertDialog.Builder(context).setTitle("ELIMINARE LA MAPPA?")
+                    .setMessage("Eliminare " + humanName(item.fileName) + "? La navigazione offline potrebbe non trovare più strade in questa zona.")
+                    .setNegativeButton("ANNULLA", null)
+                    .setPositiveButton("ELIMINA", (d, which) -> IO.execute(() -> {
+                        boolean deleted = installed.delete();
+                        File version = new File(mapsDir, obfName + ".version");
+                        if (version.exists()) version.delete();
+                        MAIN.post(() -> {
+                            filter.run();
+                            status.setText(deleted ? "Mappa eliminata: " + humanName(item.fileName)
+                                    : "Impossibile eliminare la mappa. Controlla lo spazio e i permessi.");
+                        });
+                    })).show();
+        });
+
+        verifyButton.setOnClickListener(v -> {
+            if (selected[0] < 0 || selected[0] >= visible.size()) {
+                status.setText("Seleziona prima una mappa installata da verificare.");
+                return;
+            }
+            MapItem item = visible.get(selected[0]);
+            String obfName = item.fileName.substring(0, item.fileName.length() - 4);
+            File installed = new File(mapsDir, obfName);
+            status.setText("Verifica struttura della mappa in corso…");
+            IO.execute(() -> {
+                String result;
+                try {
+                    if (!installed.isFile() || installed.length() < 1024)
+                        throw new IllegalStateException("File assente o troppo piccolo");
+                    try (RandomAccessFile raf = new RandomAccessFile(installed, "r")) {
+                        BinaryMapIndexReader reader = new BinaryMapIndexReader(raf, installed);
+                        reader.close();
+                    }
+                    result = "VERIFICA OK: " + humanName(item.fileName)
+                            + " · " + (installed.length() / (1024 * 1024)) + " MB. Struttura OBF leggibile. Il catalogo non pubblica un checksum per questo pacchetto, quindi non è disponibile una verifica SHA-256 indipendente.";
+                } catch (Exception e) {
+                    result = "VERIFICA FALLITA: " + humanName(item.fileName) + " · " + safeMessage(e);
+                }
+                final String message = result;
+                MAIN.post(() -> status.setText(message));
+            });
+        });
+
+        updatesButton.setOnClickListener(v -> {
+            status.setText("Controllo aggiornamenti nel catalogo ufficiale…");
+            loadCatalog(all, visible, adapter, mapsDir, status, search.getText().toString());
+        });
+
         search.addTextChangedListener(new android.text.TextWatcher() {
             @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) { }
             @Override public void onTextChanged(CharSequence s, int start, int before, int count) { filter.run(); }
             @Override public void afterTextChanged(android.text.Editable e) { }
         });
 
-        AlertDialog dialog = new AlertDialog.Builder(context).setTitle("MAPPE OSMAND · DOWNLOAD")
+        AlertDialog dialog = new AlertDialog.Builder(context).setTitle("MAPPE OSMAND · GESTIONE")
                 .setView(root).setNegativeButton("CHIUDI", null)
                 .setNeutralButton("AGGIORNA ELENCO", null)
-                .setPositiveButton("SCARICA SELEZIONATA", null).create();
+                .setPositiveButton("SCARICA / AGGIORNA", null).create();
         dialog.setOnShowListener(ignored -> {
             dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener(v ->
                     loadCatalog(all, visible, adapter, mapsDir, status, search.getText().toString()));
@@ -276,6 +355,7 @@ public final class OsmAndMapManager {
                     throw new IllegalStateException("Installazione atomica non riuscita");
                 }
                 if (backup.exists()) backup.delete();
+                writeInstalledVersion(new File(mapsDir, target.getName() + ".version"), item.updated);
                 MAIN.post(() -> { progress.dismiss(); success.run(); });
             } catch (Exception e) {
                 MAIN.post(() -> {
@@ -291,6 +371,25 @@ public final class OsmAndMapManager {
                 deleteTree(staging);
             }
         });
+    }
+
+    private static String readInstalledVersion(File file) {
+        if (file == null || !file.isFile()) return null;
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(
+                new java.io.FileInputStream(file), StandardCharsets.UTF_8))) {
+            String line = reader.readLine();
+            return line == null || line.trim().isEmpty() ? null : line.trim();
+        } catch (Exception ignored) { return null; }
+    }
+
+    private static void writeInstalledVersion(File file, String version) {
+        File temp = new File(file.getParentFile(), file.getName() + ".tmp");
+        try (FileOutputStream out = new FileOutputStream(temp)) {
+            out.write((version == null ? "" : version).getBytes(StandardCharsets.UTF_8));
+            out.getFD().sync();
+            if (file.exists() && !file.delete()) { temp.delete(); return; }
+            if (!temp.renameTo(file)) temp.delete();
+        } catch (Exception ignored) { temp.delete(); }
     }
 
     private static int installedCount(File dir) {
