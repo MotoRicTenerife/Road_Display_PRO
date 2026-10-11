@@ -1,6 +1,8 @@
 package com.riccardo.roaddisplay;
 
 import android.content.Context;
+import android.os.Handler;
+import android.os.Looper;
 import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.Path;
@@ -44,6 +46,8 @@ final class OsmAndOfflineMapRenderer {
     private static final int COASTLINE = 9;
 
     private final Context app;
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
+    private final Runnable invalidateView;
     private final ExecutorService worker = Executors.newSingleThreadExecutor(r -> {
         Thread t = new Thread(r, "osmand-offline-map-renderer");
         t.setDaemon(true);
@@ -85,8 +89,9 @@ final class OsmAndOfflineMapRenderer {
         Feature(int[] points, int k, boolean a) { xy = points; kind = k; area = a; }
     }
 
-    OsmAndOfflineMapRenderer(Context context) {
+    OsmAndOfflineMapRenderer(Context context, Runnable invalidateView) {
         app = context.getApplicationContext();
+        this.invalidateView = invalidateView;
     }
 
     boolean draw(Canvas canvas, RectF bounds, double centerLat, double centerLon,
@@ -275,6 +280,10 @@ final class OsmAndOfflineMapRenderer {
                 // clearing it and exposing a blank map while the next query retries.
             } finally {
                 loading = false;
+                // The query runs off the UI thread. Explicitly redraw when it finishes;
+                // otherwise the first empty/loading canvas can remain visible indefinitely
+                // on screens that do not continuously invalidate their map view.
+                if (invalidateView != null) mainHandler.post(invalidateView);
             }
         });
     }
