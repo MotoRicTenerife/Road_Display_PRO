@@ -127,8 +127,8 @@ main = replace_once(
             android.content.SharedPreferences routingPrefs = getSharedPreferences("road_display", MODE_PRIVATE);
             android.widget.Button routingModeButton = new android.widget.Button(MainActivity.this);
             int savedRoutingMode = Math.max(0, Math.min(2, routingPrefs.getInt("routing_engine_mode", 0)));
-            String[] routingModeLabels = {"AUTOMATICO · OsmAnd offline prioritario", "ONLINE · Valhalla / OSRM", "OFFLINE · solo OsmAnd"};
-            routingModeButton.setText("MOTORE NAVIGAZIONE · " + routingModeLabels[savedRoutingMode]);
+            String[] routingModeLabels = {"AUTO · offline, poi online", "ONLINE · Valhalla / OSRM", "OFFLINE · solo OsmAnd"};
+            routingModeButton.setText("NAVIGAZIONE · " + routingModeLabels[savedRoutingMode]);
             routingModeButton.setAllCaps(false);
             // Long routing labels must remain readable inside the settings button on narrow screens.
             routingModeButton.setTextSize(10f);
@@ -157,7 +157,7 @@ main = replace_once(
                         int selectedMode = routingModes.getCheckedRadioButtonId() - 200;
                         if (selectedMode < 0 || selectedMode > 2) selectedMode = 0;
                         routingPrefs.edit().putInt("routing_engine_mode", selectedMode).apply();
-                        routingModeButton.setText("MOTORE NAVIGAZIONE · " + routingModeLabels[selectedMode]);
+                        routingModeButton.setText("NAVIGAZIONE · " + routingModeLabels[selectedMode]);
                     }).show();
             });
             settingsLayout.addView(routingModeButton, new LinearLayout.LayoutParams(-1, (int)dp(48)));
