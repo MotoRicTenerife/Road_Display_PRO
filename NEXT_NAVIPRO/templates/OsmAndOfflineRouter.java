@@ -26,16 +26,39 @@ final class OsmAndOfflineRouter {
     private OsmAndOfflineRouter() { }
 
     static boolean hasInstalledMaps(Context context) {
+        File[] files = installedMaps(context);
+        return files.length > 0;
+    }
+
+    /** Diagnostic used in user-visible errors; do not confuse maps inside the official OsmAnd app sandbox with ours. */
+    static String installedMapStatus(Context context) {
         File dir = mapDirectory(context);
-        File[] files = dir.listFiles((d, name) -> name.endsWith(".obf") && new File(d, name).length() > 1024);
-        return files != null && files.length > 0;
+        File[] files = installedMaps(context);
+        if (files.length == 0) {
+            return "Cartella controllata: " + dir.getAbsolutePath()
+                    + ". Nessun file .obf leggibile trovato. Se la mappa è stata scaricata nell'app OsmAnd ufficiale, va scaricata/importata anche in NEXT NAVI PRO.";
+        }
+        StringBuilder status = new StringBuilder("Mappe .obf trovate: ");
+        for (int i = 0; i < files.length; i++) {
+            if (i > 0) status.append(", ");
+            status.append(files[i].getName()).append(" (")
+                    .append(files[i].length() / (1024 * 1024)).append(" MB)");
+        }
+        return status.toString();
+    }
+
+    private static File[] installedMaps(Context context) {
+        File dir = mapDirectory(context);
+        File[] files = dir.listFiles((d, name) -> name.toLowerCase(java.util.Locale.ROOT).endsWith(".obf")
+                && new File(d, name).isFile() && new File(d, name).length() > 1024);
+        return files == null ? new File[0] : files;
     }
 
     static MainActivity.NavigationRouteResult calculate(Context context, Location start,
                                                          double destLat, double destLon) throws Exception {
         if (start == null) throw new IllegalArgumentException("Posizione iniziale mancante");
-        File[] maps = mapDirectory(context).listFiles((d, name) -> name.endsWith(".obf") && new File(d, name).length() > 1024);
-        if (maps == null || maps.length == 0) throw new IllegalStateException("Nessuna mappa OsmAnd .obf installata");
+        File[] maps = installedMaps(context);
+        if (maps.length == 0) throw new IllegalStateException(installedMapStatus(context));
 
         ArrayList<BinaryMapIndexReader> readers = new ArrayList<>();
         ArrayList<RandomAccessFile> handles = new ArrayList<>();
