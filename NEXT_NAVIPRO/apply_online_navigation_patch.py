@@ -80,6 +80,20 @@ if missing_dependencies:
     GRADLE.write_text(gradle, encoding="utf-8")
 
 main = MAIN.read_text(encoding="utf-8")
+# Match the visual map rotation to the user's two-finger gesture. The map renderer
+# rotates its content by -bearing, so bearing must move opposite to the finger angle.
+main = replace_once(
+    main,
+    "mapFrozenBearing=normalizeBearing(rotateStartBearing+delta); // Match the finger gesture direction; minus delta inverted rotation.",
+    "mapFrozenBearing=normalizeBearing(rotateStartBearing-delta); // Keep map content rotating with the two-finger gesture.",
+    "full-screen map rotation direction",
+)
+main = replace_once(
+    main,
+    "tripMapBearing=normalizeBearing(tripRotateStartBearing+delta); // Keep trip-map rotation consistent with the main map.",
+    "tripMapBearing=normalizeBearing(tripRotateStartBearing-delta); // Keep trip-map rotation consistent with the main map.",
+    "trip-map rotation direction",
+)
 # Expose map data management in the existing display-settings dialog without
 # replacing or simplifying any of the Ride HUD/settings behavior.
 main = replace_once(
@@ -658,6 +672,26 @@ print("MAP MATCHING GNSS CONFIDENCE REGRESSION: PASS")
 print("Poor-accuracy fixes are down-weighted; high-accuracy confidence is preserved.")
 ''', encoding="utf-8")
 
+rotation_test = PROJECT / "roadtools/map_rotation_gesture_regression_test.py"
+rotation_test.write_text('''#!/usr/bin/env python3
+"""Regression checks for the full-screen map's two-finger rotation direction."""
+from pathlib import Path
+ROOT = Path(__file__).resolve().parents[1]
+MAIN = (ROOT / "app/src/main/java/com/riccardo/roaddisplay/MainActivity.java").read_text(encoding="utf-8")
+assert "mapFrozenBearing=normalizeBearing(rotateStartBearing-delta);" in MAIN
+assert "tripMapBearing=normalizeBearing(tripRotateStartBearing-delta);" in MAIN
+assert "mapFrozenBearing=normalizeBearing(rotateStartBearing+delta);" not in MAIN
+assert "tripMapBearing=normalizeBearing(tripRotateStartBearing+delta);" not in MAIN
+# UI regression: long labels wrap to two lines, shrink, and ellipsize instead of overflowing.
+assert "routingModeButton.setMaxLines(2);" in MAIN
+assert "routingModeButton.setTextSize(10f);" in MAIN
+assert "routingModeButton.setEllipsize(android.text.TextUtils.TruncateAt.END);" in MAIN
+assert "osmAndMaps.setMaxLines(2);" in MAIN
+assert "osmAndMaps.setEllipsize(android.text.TextUtils.TruncateAt.END);" in MAIN
+print("MAP ROTATION GESTURE REGRESSION: PASS")
+print("SETTINGS BUTTON LABEL FIT REGRESSION: PASS")
+''', encoding="utf-8")
+
 print("ONLINE_NAV_PATCH=PASS")
 print("VERSION=3.46.0")
-print("CHANGED=frame-rate-independent marker smoothing; GNSS-aware map matching; speed-limit freshness and anti-spam warnings")
+print("CHANGED=map rotation direction; settings button text fit; frame-rate-independent marker smoothing; GNSS-aware map matching; speed-limit freshness and anti-spam warnings")
