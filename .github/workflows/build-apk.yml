@@ -52,13 +52,32 @@ jobs:
         with:
           gradle-version: '8.11.1'
 
-      - name: Build OsmAnd Java routing library
-        working-directory: upstream/Osmand
+      - name: Download official Canary Islands routing fixture
         shell: bash
         run: |
           set -euo pipefail
+          mkdir -p osmand-smoke
+          curl -fL --retry 3 --connect-timeout 20 --max-time 600 \
+            'https://download.osmand.net/download?file=Spain_canarias_europe_2.obf.zip' \
+            -o osmand-smoke/Spain_canarias_europe_2.obf.zip
+          unzip -o -q osmand-smoke/Spain_canarias_europe_2.obf.zip -d osmand-smoke
+          test -s osmand-smoke/Spain_canarias_europe_2.obf
+          ls -lh osmand-smoke/Spain_canarias_europe_2.obf
+
+      - name: Add runtime routing smoke test to pinned OsmAnd test sources
+        run: |
+          mkdir -p upstream/Osmand/OsmAnd-java/src/test/java/net/osmand/router
+          cp NEXT_NAVIPRO/OsmAndOfflineSmokeTest.java upstream/Osmand/OsmAnd-java/src/test/java/net/osmand/router/
+
+      - name: Build OsmAnd Java routing library and run real OBF route test
+        working-directory: upstream/Osmand
+        shell: bash
+        env:
+          OSMAND_SMOKE_OBF: ${{ github.workspace }}/osmand-smoke/Spain_canarias_europe_2.obf
+        run: |
+          set -euo pipefail
           ln -sfn "$GITHUB_WORKSPACE/upstream/resources" "$GITHUB_WORKSPACE/resources"
-          gradle :OsmAnd-shared:bundleDebugAar :OsmAnd-java:androidJar --no-daemon --stacktrace --max-workers=2 \
+          gradle :OsmAnd-shared:bundleDebugAar :OsmAnd-java:androidJar :OsmAnd-java:test --tests net.osmand.router.OsmAndOfflineSmokeTest --no-daemon --stacktrace --max-workers=2 \
             -Dorg.gradle.jvmargs='-Xmx3g -Xms512m -XX:MaxMetaspaceSize=1g' \
             -Pkotlin.daemon.jvmargs='-Xmx3g -Xms512m'
           test -s OsmAnd-java/build/libs/OsmAnd-java-android-master-snapshot-android.jar
