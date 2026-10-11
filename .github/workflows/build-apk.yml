@@ -210,15 +210,15 @@ jobs:
           import re
           gradle = Path("app/build.gradle")
           source = gradle.read_text(encoding="utf-8")
-          code = re.search(r"\\bversionCode\\s+(\\d+)", source)
+          code = re.search(r"\bversionCode\s+(\d+)", source)
           if not code:
               raise SystemExit("Could not locate versionCode in app/build.gradle")
           source = source[:code.start()] + "versionCode " + str(int(code.group(1)) + 1) + source[code.end():]
-          source, count = re.subn(r"versionName\\s+['\\"]3\\.46\\.0['\\"]", "versionName '3.46.1'", source, count=1)
+          source, count = re.subn(r"versionName\s+['\"]3\.46\.0['\"]", "versionName '3.46.1'", source, count=1)
           if count != 1:
               raise SystemExit("Could not stamp versionName 3.46.1")
           gradle.write_text(source, encoding="utf-8")
-          Path("BUILD_VERSION.txt").write_text("3.46.1\\n", encoding="utf-8")
+          Path("BUILD_VERSION.txt").write_text("3.46.1\n", encoding="utf-8")
           print("Stamped integration build: versionName 3.46.1; versionCode incremented")
           PY
 
