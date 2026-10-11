@@ -106,7 +106,7 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          ./gradlew --no-daemon --stacktrace assembleNightlyFreeLegacyFatDebug 2>&1 | tee ../gradle-build.log
+          ./gradlew --no-daemon --stacktrace assembleNightlyFreeLegacyArm64Debug 2>&1 | tee ../gradle-build.log
 
       - name: Verify APK exists
         shell: bash
