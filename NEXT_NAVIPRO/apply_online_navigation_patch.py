@@ -172,7 +172,7 @@ main = replace_once(main,
     """        ((android.widget.TextView) view).setText("CARTINA ONLINE · " + route);
         ((android.widget.TextView) view).setContentDescription("Cartografia online MapLibre; modalità percorso: " + route);""",
     """        boolean localObf = OsmAndOfflineRouter.hasInstalledMaps(this);
-        ((android.widget.TextView) view).setText((localObf ? "CARTINA OSMAND OFFLINE · " : "CARTINA ONLINE · ") + route);
+        ((android.widget.TextView) view).setText(localObf ? "OFF" : "ON");
         ((android.widget.TextView) view).setContentDescription((localObf ? "Cartografia vettoriale OsmAnd offline" : "Cartografia online MapLibre") + "; modalità percorso: " + route);""",
     "truthful offline cartography source badge")
 main = replace_once(main,
