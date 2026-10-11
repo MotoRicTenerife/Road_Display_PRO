@@ -52,6 +52,11 @@ if "osmand-routing-libraries" not in workflow or "OsmAnd-java:androidJar" not in
 if "OsmAndOfflineSmokeTest" not in workflow or "Spain_canarias_europe_2.obf" not in workflow:
     raise SystemExit("FAIL: CI does not test a real offline route against the Canary Islands OBF map")
 
+# Map management must cover the full lifecycle, not download-only.
+for token in ("ELIMINA", "VERIFICA", "CERCA AGGIORNAMENTI", "AGGIORNAMENTO DISPONIBILE", "writeInstalledVersion"):
+    if token.lower() not in template_lower:
+        raise SystemExit(f"FAIL: map lifecycle feature missing: {token}")
+
 # The app must be honest: downloading .obf files is not itself proof of offline routing.
 if "does not claim offline navigation" not in template_lower and "il motore osmand deve calcolare un percorso reale" not in template_lower:
     raise SystemExit("FAIL: missing explicit guard against claiming unimplemented offline routing")
