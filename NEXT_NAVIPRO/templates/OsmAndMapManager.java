@@ -134,6 +134,7 @@ public final class OsmAndMapManager {
             visible.clear();
             for (MapItem item : all) {
                 String hay = (item.fileName + " " + item.description).toLowerCase(Locale.ROOT);
+                if (hay.contains("canarias")) hay += " canary canarie canary islands canarie islands islas canarias";
                 if (q.isEmpty() || hay.contains(q)) visible.add(item);
             }
             Collections.sort(visible, Comparator.comparing((MapItem m) ->
@@ -261,8 +262,9 @@ public final class OsmAndMapManager {
                     String q = query == null || query.trim().isEmpty() ? "Canarias" : query;
                     visible.clear();
                     for (MapItem item : all) {
-                        if ((item.fileName + " " + item.description).toLowerCase(Locale.ROOT)
-                                .contains(q.toLowerCase(Locale.ROOT))) visible.add(item);
+                        String hay = (item.fileName + " " + item.description).toLowerCase(Locale.ROOT);
+                        if (hay.contains("canarias")) hay += " canary canarie canary islands canarie islands islas canarias";
+                        if (hay.contains(q.toLowerCase(Locale.ROOT))) visible.add(item);
                     }
                     Collections.sort(visible, Comparator.comparing((MapItem m) ->
                             !m.fileName.toLowerCase(Locale.ROOT).contains("canarias")));
@@ -310,14 +312,16 @@ public final class OsmAndMapManager {
                 Pattern.CASE_INSENSITIVE);
         String[] lines = raw.split("\\r?\\n");
         for (String line : lines) {
+            String cleanedLine = cleanCatalogCell(line);
             Matcher m = tablePattern.matcher(line);
+            if (!m.matches()) m = tablePattern.matcher(cleanedLine);
             if (m.matches()) {
                 String filename = m.group(1) != null ? m.group(1) : m.group(2);
                 result.add(new MapItem(filename, cleanCatalogCell(m.group(3)).trim(),
                         m.group(4).replace(',', '.'), cleanCatalogCell(m.group(5)).trim()));
                 continue;
             }
-            Matcher legacy = CATALOG_LINE.matcher(line);
+            Matcher legacy = CATALOG_LINE.matcher(cleanedLine);
             if (legacy.matches()) {
                 result.add(new MapItem(legacy.group(1), cleanCatalogCell(legacy.group(2)).trim(),
                         legacy.group(3), cleanCatalogCell(legacy.group(4)).trim()));
