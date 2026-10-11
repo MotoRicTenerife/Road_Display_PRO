@@ -240,10 +240,10 @@ main = replace_once(
                     throw new IllegalStateException("OsmAnd non ha restituito un percorso valido");
                 } catch (Exception offlineFailure) {
                     android.util.Log.w("RoadDisplay", "OsmAnd offline route unavailable", offlineFailure);
-                    if (routingMode == 2) throw new Exception("MODALITÀ OFFLINE: percorso OsmAnd non disponibile. Verifica che la mappa .obf copra partenza e destinazione.", offlineFailure);
+                    if (routingMode == 2) throw new Exception("MODALITÀ OFFLINE: calcolo OsmAnd fallito. " + OsmAndOfflineRouter.safeMessage(offlineFailure), offlineFailure);
                 }
             }
-            if (routingMode == 2) throw new Exception("MODALITÀ OFFLINE: nessuna mappa OsmAnd .obf installata o compatibile con il percorso.");
+            if (routingMode == 2) throw new Exception("MODALITÀ OFFLINE: " + OsmAndOfflineRouter.installedMapStatus(MainActivity.this));
             // Ask the existing online routing engines concurrently. Valhalla remains primary;""",
     "OsmAnd offline-first route selection",
 )
