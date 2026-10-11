@@ -123,14 +123,11 @@ jobs:
           test -f Road_Display_PRO/build.gradle
           python3 - <<'PY'
           from pathlib import Path
-          import re
           p = Path("Road_Display_PRO/build.gradle")
           s = p.read_text(encoding="utf-8")
-          original = s
-          s = re.sub(r"(id\s+['"]com\.android\.application['"]\s+version\s+['"])[^'"]+(['"])", r"\g<1>8.6.1\\2", s)
-          s = re.sub(r"(com\.android\.tools\.build:gradle:)[0-9.]+", r"\g<1>8.6.1", s)
-          if s == original and "8.6.1" not in s:
-              raise SystemExit("Could not locate Android Gradle Plugin declaration in extracted project")
+          s = s.replace("8.5.2", "8.6.1")
+          if "8.6.1" not in s:
+              raise SystemExit("Could not locate Android Gradle Plugin version in extracted project")
           p.write_text(s, encoding="utf-8")
           print("Effective Android Gradle Plugin declaration:")
           print("\n".join(line for line in s.splitlines() if "com.android.application" in line or "com.android.tools.build:gradle:" in line))
