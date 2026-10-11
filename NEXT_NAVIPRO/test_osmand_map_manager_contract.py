@@ -43,6 +43,13 @@ for token in ('AUTOMATICO · OsmAnd, poi online', 'ONLINE · Valhalla / OSRM', '
         raise SystemExit(f"FAIL: missing routing mode control/policy: {token}")
 if "OSMAND_OFFLINE" not in router or "new BinaryMapIndexReader" not in router:
     raise SystemExit("FAIL: offline router does not open real OsmAnd .obf data")
+for token in ("installedMapStatus(Context context)", "Cartella controllata:", "Nessun file .obf leggibile trovato"):
+    if token not in router:
+        raise SystemExit(f"FAIL: offline diagnostics missing: {token}")
+if "OsmAndOfflineRouter.safeMessage(offlineFailure)" not in patch:
+    raise SystemExit("FAIL: OFFLINE mode hides the real OsmAnd routing failure reason")
+if "OsmAndOfflineRouter.installedMapStatus(MainActivity.this)" not in patch:
+    raise SystemExit("FAIL: OFFLINE mode does not explain where the app searched for .obf files")
 if "class PlatformUtil" not in platform:
     raise SystemExit("FAIL: Android PlatformUtil shim is missing")
 if "python3 NEXT_NAVIPRO/test_osmand_map_manager_contract.py" not in workflow:
