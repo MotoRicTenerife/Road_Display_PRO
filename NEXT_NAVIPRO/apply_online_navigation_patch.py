@@ -6,6 +6,7 @@ in CI and fails closed if expected source snippets have drifted.
 """
 from pathlib import Path
 import re
+import shutil
 
 ROOT = Path(__file__).resolve().parents[1]
 PROJECT = ROOT / "Road_Display_PRO"
@@ -16,6 +17,8 @@ SMOOTH_TEST = PROJECT / "roadtools/map_marker_smoothing_regression_test.py"
 RADAR_TEST = PROJECT / "roadtools/radar_system_regression_test.py"
 BUILD_VERSION = PROJECT / "BUILD_VERSION.txt"
 GRADLE = PROJECT / "app/build.gradle"
+MAP_MANAGER = PROJECT / "app/src/main/java/com/riccardo/roaddisplay/OsmAndMapManager.java"
+MAP_MANAGER_TEMPLATE = ROOT / "NEXT_NAVIPRO/templates/OsmAndMapManager.java"
 
 def replace_once(text: str, old: str, new: str, label: str) -> str:
     count = text.count(old)
@@ -25,7 +28,41 @@ def replace_once(text: str, old: str, new: str, label: str) -> str:
         raise RuntimeError(f"{label}: expected exactly one baseline match, got {count}")
     return text.replace(old, new, 1)
 
+if not MAP_MANAGER_TEMPLATE.is_file():
+    raise RuntimeError(f"Missing OsmAnd map manager template: {MAP_MANAGER_TEMPLATE}")
+MAP_MANAGER.parent.mkdir(parents=True, exist_ok=True)
+shutil.copyfile(MAP_MANAGER_TEMPLATE, MAP_MANAGER)
+
 main = MAIN.read_text(encoding="utf-8")
+# Expose map data management in the existing display-settings dialog without
+# replacing or simplifying any of the Ride HUD/settings behavior.
+main = replace_once(
+    main,
+    """            group.setOrientation(android.widget.RadioGroup.VERTICAL);
+            group.setPadding((int)dp(18), (int)dp(8), (int)dp(18), (int)dp(8));
+            final android.widget.RadioButton[] radios = new android.widget.RadioButton[modes.length];""",
+    """            group.setOrientation(android.widget.RadioGroup.VERTICAL);
+            group.setPadding((int)dp(18), (int)dp(8), (int)dp(18), (int)dp(8));
+            LinearLayout settingsLayout = new LinearLayout(MainActivity.this);
+            settingsLayout.setOrientation(LinearLayout.VERTICAL);
+            settingsLayout.addView(group, new LinearLayout.LayoutParams(-1, -2));
+            final android.widget.RadioButton[] radios = new android.widget.RadioButton[modes.length];""",
+    "OsmAnd manager settings container",
+)
+main = replace_once(
+    main,
+    """            group.check(100 + Math.max(0, Math.min(2, displayThemeMode)));
+            String luxText = Float.isNaN(currentAmbientLux) ? "Lettura sensore: non disponibile" : "Lettura sensore: " + Math.round(currentAmbientLux) + " lux";""",
+    """            group.check(100 + Math.max(0, Math.min(2, displayThemeMode)));
+            android.widget.Button osmAndMaps = new android.widget.Button(MainActivity.this);
+            osmAndMaps.setText("MAPPE OSMAND · SCARICA / GESTISCI");
+            osmAndMaps.setAllCaps(false);
+            osmAndMaps.setOnClickListener(v -> OsmAndMapManager.show(MainActivity.this));
+            settingsLayout.addView(osmAndMaps, new LinearLayout.LayoutParams(-1, (int)dp(48)));
+            String luxText = Float.isNaN(currentAmbientLux) ? "Lettura sensore: non disponibile" : "Lettura sensore: " + Math.round(currentAmbientLux) + " lux";""",
+    "OsmAnd manager settings button",
+)
+main = replace_once(main, ".setView(group)\\n                .setNegativeButton(\"ANNULLA\", null)", ".setView(settingsLayout)\\n                .setNegativeButton(\"ANNULLA\", null)", "OsmAnd manager settings view")
 # Keep valid-but-moderate GNSS fixes alive longer; never treat one weak sample as an immediate outage.
 main = replace_once(
     main,
