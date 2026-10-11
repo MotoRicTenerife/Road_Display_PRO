@@ -3,6 +3,7 @@
 ## Bootstrap
 - [x] Create isolated OsmAnd-based rebuild branch.
 - [x] Add CI workflow to checkout official OsmAnd and companion repositories.
+- [x] Install the workflow on the default branch so draft-PR checks can execute.
 - [ ] Obtain a successful upstream baseline build in CI.
 - [ ] Pin all upstream repository revisions from a successful build.
 - [ ] Archive build logs and exact toolchain versions.
