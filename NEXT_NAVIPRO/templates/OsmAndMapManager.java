@@ -147,7 +147,7 @@ public final class OsmAndMapManager {
                 downloadAndInstall(context, item, mapsDir, status, () -> {
                     filter.run();
                     status.setText("Installata " + humanName(item.fileName)
-                            + ". Routing offline non attivo finché l'engine OsmAnd non supera il test runtime.");
+                            + ". OsmAnd tenterà il routing offline; la disponibilità dipende dalla copertura e dal calcolo reale del percorso.");
                 });
             });
             loadCatalog(all, visible, adapter, mapsDir, status, "Canarias");
