@@ -63,7 +63,7 @@ final class OsmAndOfflineRouter {
                     routingContext = planner.buildRoutingContext(config, null, readerArray);
                     List<RouteSegmentResult> segments = planner.searchRoute(routingContext,
                             new LatLon(start.getLatitude(), start.getLongitude()),
-                            new LatLon(destLat, destLon), null).detailed;
+                            new LatLon(destLat, destLon), null).getList();
                     MainActivity.NavigationRouteResult result = convert(segments, profile);
                     if (result.route.size() >= 2 && result.distanceM > 0) return result;
                     throw new IllegalStateException("OsmAnd non ha restituito una geometria di percorso valida");
