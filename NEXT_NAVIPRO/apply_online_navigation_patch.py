@@ -131,7 +131,14 @@ main = replace_once(
                         while(delta>180f)delta-=360f; while(delta<-180f)delta+=360f;
                         mapFrozenBearing=normalizeBearing(vectorRotateStartBearing-delta);
                         mapUserPanned=true; movedMap=true;
-                        syncVectorMapCamera(false);
+                        // Change only the bearing: preserve MapLibre's live target and zoom
+                        // so rotation never snaps the map back during a simultaneous pinch.
+                        try {
+                            CameraPosition currentCamera = vectorMap.getCameraPosition();
+                            vectorMap.setCameraPosition(new CameraPosition.Builder()
+                                    .target(currentCamera.target).zoom(currentCamera.zoom)
+                                    .tilt(currentCamera.tilt).bearing(mapFrozenBearing).build());
+                        } catch (Throwable ignored) { }
                     }
                     if(action==MotionEvent.ACTION_MOVE && Math.hypot(x-downX,y-downY)>dp(8)) movedMap=true;
                     if(action==MotionEvent.ACTION_POINTER_UP || action==MotionEvent.ACTION_CANCEL || action==MotionEvent.ACTION_UP)
@@ -726,6 +733,8 @@ MAIN = (ROOT / "app/src/main/java/com/riccardo/roaddisplay/MainActivity.java").r
 assert "map.getUiSettings().setRotateGesturesEnabled(false);" in MAIN
 assert "vectorRotating=true; movedMap=true;" in MAIN
 assert "mapFrozenBearing=normalizeBearing(vectorRotateStartBearing-delta);" in MAIN
+assert "CameraPosition currentCamera = vectorMap.getCameraPosition();" in MAIN
+assert ".target(currentCamera.target).zoom(currentCamera.zoom)" in MAIN
 assert "mapFrozenBearing=normalizeBearing(rotateStartBearing-delta);" in MAIN
 assert "tripMapBearing=normalizeBearing(tripRotateStartBearing-delta);" in MAIN
 assert "mapFrozenBearing=normalizeBearing(rotateStartBearing+delta);" not in MAIN
