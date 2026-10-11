@@ -13,8 +13,71 @@ on:
       - 'next-navi-pro/**'
 
 jobs:
-  build:
+  osmand-routing-libraries:
     runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - name: Checkout ROAD DISPLAY PRO
+        uses: actions/checkout@v4
+
+      - name: Checkout pinned OsmAnd source
+        uses: actions/checkout@v4
+        with:
+          repository: osmandapp/Osmand
+          ref: cacaa5fe1499af8806210de6f81293f925847043
+          path: upstream/Osmand
+          fetch-depth: 1
+
+      - name: Checkout OsmAnd resources
+        uses: actions/checkout@v4
+        with:
+          repository: osmandapp/OsmAnd-resources
+          ref: master
+          path: upstream/resources
+          fetch-depth: 1
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-36 build-tools;36.0.0'
+
+      - name: Setup Gradle for pinned OsmAnd source
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+
+      - name: Build OsmAnd Java routing library
+        working-directory: upstream/Osmand
+        shell: bash
+        run: |
+          set -euo pipefail
+          ln -sfn "$GITHUB_WORKSPACE/upstream/resources" "$GITHUB_WORKSPACE/resources"
+          gradle :OsmAnd-java:androidJar --no-daemon --stacktrace --max-workers=2 \
+            -Dorg.gradle.jvmargs='-Xmx3g -Xms512m -XX:MaxMetaspaceSize=1g' \
+            -Pkotlin.daemon.jvmargs='-Xmx3g -Xms512m'
+          test -s OsmAnd-java/build/libs/OsmAnd-java-android-master-snapshot-android.jar
+          mkdir -p "$GITHUB_WORKSPACE/osmand-routing-libraries"
+          cp OsmAnd-java/build/libs/OsmAnd-java-android-master-snapshot-android.jar "$GITHUB_WORKSPACE/osmand-routing-libraries/"
+          find OsmAnd-shared/build/libs -maxdepth 1 -type f -name '*.jar' -exec cp {} "$GITHUB_WORKSPACE/osmand-routing-libraries/" \;
+          ls -lh "$GITHUB_WORKSPACE/osmand-routing-libraries"
+          test "$(find "$GITHUB_WORKSPACE/osmand-routing-libraries" -maxdepth 1 -type f -name '*.jar' | wc -l)" -ge 2
+
+      - name: Upload pinned OsmAnd runtime libraries
+        uses: actions/upload-artifact@v4
+        with:
+          name: osmand-routing-libraries
+          path: osmand-routing-libraries/*.jar
+          if-no-files-found: error
+          retention-days: 3
+
+  build:
+    needs: osmand-routing-libraries
 
     steps:
       - name: Checkout repository
@@ -31,6 +94,12 @@ jobs:
           unzip -o Road_Display_PRO_3.0.0.zip
           ls -la
           ls -la Road_Display_PRO
+
+      - name: Download pinned OsmAnd routing libraries
+        uses: actions/download-artifact@v4
+        with:
+          name: osmand-routing-libraries
+          path: Road_Display_PRO/app/libs
 
       - name: Apply online navigation quality patch
         run: python3 NEXT_NAVIPRO/apply_online_navigation_patch.py
