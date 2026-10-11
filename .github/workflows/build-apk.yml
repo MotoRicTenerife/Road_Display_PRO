@@ -127,7 +127,7 @@ jobs:
           p = Path("Road_Display_PRO/build.gradle")
           s = p.read_text(encoding="utf-8")
           original = s
-          s = re.sub(r"(id\s+['"]com\.android\.application['"]\s+version\s+['"])[^'"]+(['"])", r"\g<1>8.6.1\2", s)
+          s = re.sub(r"""(id\s+['"]com\.android\.application['"]\s+version\s+['"])[^'"]+(['"])""", r"\g<1>8.6.1\2", s)
           s = re.sub(r"(com\.android\.tools\.build:gradle:)[0-9.]+", r"\g<1>8.6.1", s)
           if s == original:
               raise SystemExit("Could not patch Android Gradle Plugin declaration in extracted project")
