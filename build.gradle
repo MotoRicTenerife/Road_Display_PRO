@@ -1,3 +1,4 @@
 plugins {
-    id 'com.android.application' version '8.5.2' apply false
+    // AGP 8.6.1 includes the D8 global-synthetics handling needed by the pinned OsmAnd runtime.
+    id 'com.android.application' version '8.6.1' apply false
 }

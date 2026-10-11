@@ -12,8 +12,98 @@ on:
       - master
       - 'next-navi-pro/**'
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
+  osmand-routing-libraries:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - name: Checkout ROAD DISPLAY PRO
+        uses: actions/checkout@v4
+
+      - name: Checkout pinned OsmAnd source
+        uses: actions/checkout@v4
+        with:
+          repository: osmandapp/Osmand
+          ref: cacaa5fe1499af8806210de6f81293f925847043
+          path: upstream/Osmand
+          fetch-depth: 1
+
+      - name: Checkout OsmAnd resources
+        uses: actions/checkout@v4
+        with:
+          repository: osmandapp/OsmAnd-resources
+          ref: b981dac242961d9de6135b1b0ff82cabd8f55a7d
+          path: upstream/resources
+          fetch-depth: 1
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-35 platforms;android-36 build-tools;35.0.0 build-tools;36.0.0'
+
+      - name: Setup Gradle for pinned OsmAnd source
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+
+      - name: Download official Canary Islands routing fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p osmand-smoke
+          curl -fL --retry 3 --connect-timeout 20 --max-time 600 \
+            'https://download.osmand.net/download?file=Spain_canarias_europe_2.obf.zip' \
+            -o osmand-smoke/Spain_canarias_europe_2.obf.zip
+          unzip -o -q osmand-smoke/Spain_canarias_europe_2.obf.zip -d osmand-smoke
+          test -s osmand-smoke/Spain_canarias_europe_2.obf
+          ls -lh osmand-smoke/Spain_canarias_europe_2.obf
+
+      - name: Add runtime routing smoke test to pinned OsmAnd test sources
+        run: |
+          mkdir -p upstream/Osmand/OsmAnd-java/src/test/java/net/osmand/router
+          cp NEXT_NAVIPRO/OsmAndOfflineSmokeTest.java upstream/Osmand/OsmAnd-java/src/test/java/net/osmand/router/
+
+      - name: Build OsmAnd Java routing library and run real OBF route test
+        working-directory: upstream/Osmand
+        shell: bash
+        env:
+          OSMAND_SMOKE_OBF: ${{ github.workspace }}/osmand-smoke/Spain_canarias_europe_2.obf
+        run: |
+          set -euo pipefail
+          ln -sfn "$GITHUB_WORKSPACE/upstream/resources" "$GITHUB_WORKSPACE/resources"
+          gradle :OsmAnd-shared:bundleDebugAar :OsmAnd-java:androidJar :OsmAnd-java:test --tests net.osmand.router.OsmAndOfflineSmokeTest --no-daemon --stacktrace --max-workers=2 \
+            -Dorg.gradle.jvmargs='-Xmx3g -Xms512m -XX:MaxMetaspaceSize=1g' \
+            -Pkotlin.daemon.jvmargs='-Xmx3g -Xms512m'
+          test -s OsmAnd-java/build/libs/OsmAnd-java-android-master-snapshot-android.jar
+          test -s OsmAnd-shared/build/outputs/aar/OsmAnd-shared-debug.aar
+          mkdir -p "$GITHUB_WORKSPACE/osmand-routing-libraries"
+          cp OsmAnd-java/build/libs/OsmAnd-java-android-master-snapshot-android.jar "$GITHUB_WORKSPACE/osmand-routing-libraries/"
+          cp OsmAnd-shared/build/outputs/aar/OsmAnd-shared-debug.aar "$GITHUB_WORKSPACE/osmand-routing-libraries/"
+          cp LICENSE "$GITHUB_WORKSPACE/osmand-routing-libraries/OsmAnd-LICENSE.txt"
+          ls -lh "$GITHUB_WORKSPACE/osmand-routing-libraries"
+          test -s "$GITHUB_WORKSPACE/osmand-routing-libraries/OsmAnd-shared-debug.aar"
+          test -s "$GITHUB_WORKSPACE/osmand-routing-libraries/OsmAnd-java-android-master-snapshot-android.jar"
+
+      - name: Upload pinned OsmAnd runtime libraries
+        uses: actions/upload-artifact@v4
+        with:
+          name: osmand-routing-libraries
+          path: osmand-routing-libraries/*
+          if-no-files-found: error
+          retention-days: 3
+
   build:
+    needs: osmand-routing-libraries
     runs-on: ubuntu-latest
 
     steps:
@@ -23,14 +113,76 @@ jobs:
       - name: Validate universal offline-region package contract
         run: python3 NEXT_NAVIPRO/test_offline_catalog_contract.py
 
-      - name: Extract project
+      - name: Validate OsmAnd map manager contract
+        run: python3 NEXT_NAVIPRO/test_osmand_map_manager_contract.py
+
+      - name: Extract project and align Android Gradle Plugin
         run: |
+          set -euo pipefail
           unzip -o Road_Display_PRO_3.0.0.zip
+          test -f Road_Display_PRO/build.gradle
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          p = Path("Road_Display_PRO/build.gradle")
+          s = p.read_text(encoding="utf-8")
+          original = s
+          # Support both Groovy DSL and parenthesized plugin declarations.
+          s = re.sub(r"""(id\s*\(?\s*['"]com\.android\.application['"]\s*\)?\s+version\s+['"])[^'"]+(['"])""", r"\g<1>8.9.2\2", s)
+          s = re.sub(r"(com\.android\.tools\.build:gradle:)[0-9.]+", r"\g<1>8.9.2", s)
+          if s == original:
+              # The archived project already declares the Android application plugin
+              # (often at the target version). Do not append a second request for the
+              # same plugin: Gradle rejects duplicate plugin IDs in one plugins block.
+              # Only add a root declaration if neither root build.gradle nor settings.gradle
+              # declares it at all.
+              settings = Path("Road_Display_PRO/settings.gradle")
+              settings_text = settings.read_text(encoding="utf-8") if settings.exists() else ""
+              if "com.android.application" not in s and "com.android.application" not in settings_text:
+                  s = s.rstrip() + "\n\nplugins {\n    id 'com.android.application' version '8.9.2' apply false\n}\n"
+          p.write_text(s, encoding="utf-8")
+          print("Effective Android Gradle Plugin declaration:")
+          print("\n".join(line.strip() for line in s.splitlines() if "com.android.application" in line or "com.android.tools.build:gradle:" in line))
+          PY
           ls -la
           ls -la Road_Display_PRO
 
+      - name: Download pinned OsmAnd routing libraries
+        uses: actions/download-artifact@v4
+        with:
+          name: osmand-routing-libraries
+          path: Road_Display_PRO/app/libs
+
+      - name: Install third-party notices in app assets
+        run: |
+          set -euo pipefail
+          mkdir -p Road_Display_PRO/app/src/main/assets/osmand
+          cp Road_Display_PRO/app/libs/OsmAnd-LICENSE.txt Road_Display_PRO/app/src/main/assets/osmand/LICENSE.txt
+          cp NEXT_NAVIPRO/THIRD_PARTY_NOTICES_OSMAND.md Road_Display_PRO/app/src/main/assets/osmand/THIRD_PARTY_NOTICES.md
+
       - name: Apply online navigation quality patch
         run: python3 NEXT_NAVIPRO/apply_online_navigation_patch.py
+
+      - name: Diagnose full-screen map rotation gesture
+        working-directory: Road_Display_PRO
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("app/src/main/java/com/riccardo/roaddisplay/MainActivity.java")
+          lines = p.read_text(encoding="utf-8").splitlines()
+          terms = ("atan2", "rotation", "rotate", "ACTION_POINTER", "mapExpanded", "angle", "touchSlop")
+          hits = [i for i, line in enumerate(lines) if any(t.lower() in line.lower() for t in terms)]
+          shown = set()
+          print("=== MAP ROTATION / MULTI-TOUCH DIAGNOSTIC ===")
+          for i in hits:
+              for j in range(max(0, i-3), min(len(lines), i+4)):
+                  if j not in shown:
+                      print(f"{j+1}: {lines[j]}")
+                      shown.add(j)
+              print("---")
+          print(f"TOTAL_MATCH_LINES={len(hits)}")
+          PY
 
       - name: Verify baseline and run existing regression suite
         working-directory: Road_Display_PRO
@@ -49,6 +201,26 @@ jobs:
             python3 "$test_file"
             echo "::endgroup::"
           done
+
+      - name: Stamp unique integration build version
+        working-directory: Road_Display_PRO
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          gradle = Path("app/build.gradle")
+          source = gradle.read_text(encoding="utf-8")
+          code = re.search(r"\bversionCode\s+(\d+)", source)
+          if not code:
+              raise SystemExit("Could not locate versionCode in app/build.gradle")
+          source = source[:code.start()] + "versionCode " + str(int(code.group(1)) + 1) + source[code.end():]
+          source, count = re.subn(r"versionName\s+['\"]3\.46\.0['\"]", "versionName '3.46.1'", source, count=1)
+          if count != 1:
+              raise SystemExit("Could not stamp versionName 3.46.1")
+          gradle.write_text(source, encoding="utf-8")
+          Path("BUILD_VERSION.txt").write_text("3.46.1\n", encoding="utf-8")
+          print("Stamped integration build: versionName 3.46.1; versionCode incremented")
+          PY
 
       - name: Publish navigation source snapshot for integration review
         working-directory: Road_Display_PRO
@@ -76,6 +248,14 @@ jobs:
           echo 'Effective AndroidX setting:'
           grep '^android.useAndroidX=' gradle.properties
           test "$(grep '^android.useAndroidX=' gradle.properties | tail -n 1)" = 'android.useAndroidX=true'
+          if grep -q '^android.enableGlobalSyntheticsGeneration=' gradle.properties; then
+            sed -i 's/^android.enableGlobalSyntheticsGeneration=.*/android.enableGlobalSyntheticsGeneration=true/' gradle.properties
+          else
+            echo 'android.enableGlobalSyntheticsGeneration=true' >> gradle.properties
+          fi
+          echo 'Effective global synthetics setting:'
+          grep '^android.enableGlobalSyntheticsGeneration=' gradle.properties
+          test "$(grep '^android.enableGlobalSyntheticsGeneration=' gradle.properties | tail -n 1)" = 'android.enableGlobalSyntheticsGeneration=true'
 
       - name: Setup Java 17
         uses: actions/setup-java@v4
@@ -91,14 +271,45 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: '8.7'
+          gradle-version: '8.11.1'
 
+      - name: Align Java bytecode level and core library desugaring
+        working-directory: Road_Display_PRO
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          p = Path("app/build.gradle")
+          s = p.read_text(encoding="utf-8")
+          # OsmAnd's routing dependency includes Java records. Configure a Java 17 consumer.
+          m = re.search(r"compileOptions\s*\{[^}]*\}", s, re.S)
+          if m:
+              block = m.group(0)
+              block = re.sub(r"sourceCompatibility\s+[^\n}]+", "sourceCompatibility JavaVersion.VERSION_17", block)
+              block = re.sub(r"targetCompatibility\s+[^\n}]+", "targetCompatibility JavaVersion.VERSION_17", block)
+              if "sourceCompatibility" not in block:
+                  block = block[:-1] + "\n        sourceCompatibility JavaVersion.VERSION_17\n    }"
+              if "targetCompatibility" not in block:
+                  block = block[:-1] + "\n        targetCompatibility JavaVersion.VERSION_17\n    }"
+              if "coreLibraryDesugaringEnabled" not in block:
+                  block = block[:-1] + "\n        coreLibraryDesugaringEnabled true\n    }"
+              s = s[:m.start()] + block + s[m.end():]
+          else:
+              s += "\n\nandroid {\n    compileOptions {\n        sourceCompatibility JavaVersion.VERSION_17\n        targetCompatibility JavaVersion.VERSION_17\n        coreLibraryDesugaringEnabled true\n    }\n}\n"
+          if "com.android.tools:desugar_jdk_libs:2.1.5" not in s:
+              s += "\n\ndependencies {\n    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.5'\n}\n"
+          p.write_text(s, encoding="utf-8")
+          print("Effective Java/desugaring config:")
+          print("\n".join(x for x in s.splitlines() if "sourceCompatibility" in x or "targetCompatibility" in x or "coreLibraryDesugaring" in x))
+          PY
       - name: Build APK
         working-directory: Road_Display_PRO
-        run: gradle assembleDebug
+        run: gradle assembleDebug --stacktrace
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: next-navi-pro-speed-limits-3.46.0-debug
+          name: NEXT-NAVI-PRO-3.46.1-OFFLINE-MAPS-debug
           path: Road_Display_PRO/app/build/outputs/apk/debug/app-debug.apk

@@ -6,6 +6,7 @@ in CI and fails closed if expected source snippets have drifted.
 """
 from pathlib import Path
 import re
+import shutil
 
 ROOT = Path(__file__).resolve().parents[1]
 PROJECT = ROOT / "Road_Display_PRO"
@@ -16,6 +17,14 @@ SMOOTH_TEST = PROJECT / "roadtools/map_marker_smoothing_regression_test.py"
 RADAR_TEST = PROJECT / "roadtools/radar_system_regression_test.py"
 BUILD_VERSION = PROJECT / "BUILD_VERSION.txt"
 GRADLE = PROJECT / "app/build.gradle"
+MAP_MANAGER = PROJECT / "app/src/main/java/com/riccardo/roaddisplay/OsmAndMapManager.java"
+MAP_MANAGER_TEMPLATE = ROOT / "NEXT_NAVIPRO/templates/OsmAndMapManager.java"
+OSMAND_ROUTER = PROJECT / "app/src/main/java/com/riccardo/roaddisplay/OsmAndOfflineRouter.java"
+OSMAND_ROUTER_TEMPLATE = ROOT / "NEXT_NAVIPRO/templates/OsmAndOfflineRouter.java"
+PLATFORM_SHIM = PROJECT / "app/src/main/java/net/osmand/PlatformUtil.java"
+PLATFORM_SHIM_TEMPLATE = ROOT / "NEXT_NAVIPRO/templates/PlatformUtil.java"
+OFFLINE_RENDERER = PROJECT / "app/src/main/java/com/riccardo/roaddisplay/OsmAndOfflineMapRenderer.java"
+OFFLINE_RENDERER_TEMPLATE = ROOT / "NEXT_NAVIPRO/templates/OsmAndOfflineMapRenderer.java"
 
 def replace_once(text: str, old: str, new: str, label: str) -> str:
     count = text.count(old)
@@ -25,7 +34,327 @@ def replace_once(text: str, old: str, new: str, label: str) -> str:
         raise RuntimeError(f"{label}: expected exactly one baseline match, got {count}")
     return text.replace(old, new, 1)
 
+for template in (MAP_MANAGER_TEMPLATE, OSMAND_ROUTER_TEMPLATE, PLATFORM_SHIM_TEMPLATE, OFFLINE_RENDERER_TEMPLATE):
+    if not template.is_file():
+        raise RuntimeError(f"Missing required OsmAnd integration template: {template}")
+MAP_MANAGER.parent.mkdir(parents=True, exist_ok=True)
+OSMAND_ROUTER.parent.mkdir(parents=True, exist_ok=True)
+PLATFORM_SHIM.parent.mkdir(parents=True, exist_ok=True)
+shutil.copyfile(MAP_MANAGER_TEMPLATE, MAP_MANAGER)
+shutil.copyfile(OSMAND_ROUTER_TEMPLATE, OSMAND_ROUTER)
+shutil.copyfile(PLATFORM_SHIM_TEMPLATE, PLATFORM_SHIM)
+shutil.copyfile(OFFLINE_RENDERER_TEMPLATE, OFFLINE_RENDERER)
+
+# Attach the OsmAnd Java engine and its runtime support libraries to the archived app build.
+gradle = GRADLE.read_text(encoding="utf-8")
+required_dependencies = [
+    "implementation fileTree(dir: 'libs', include: ['*.jar'])",
+    "implementation 'commons-logging:commons-logging:1.2'",
+    "implementation 'com.google.code.gson:gson:2.8.9'",
+    "implementation 'org.json:json:20171018'",
+    "implementation 'org.apache.commons:commons-compress:1.17'",
+    "implementation 'com.moparisthebest:junidecode:0.1.1'",
+    "implementation 'com.vividsolutions:jts-core:1.14.0'",
+    "implementation 'com.google.openlocationcode:openlocationcode:1.0.4'",
+    "implementation 'net.sf.kxml:kxml2:2.1.8'",
+    "implementation 'net.sf.trove4j:trove4j:3.0.3'",
+    "implementation files('libs/OsmAnd-shared-debug.aar')",
+    "implementation 'org.jetbrains.kotlin:kotlin-stdlib:2.1.20'",
+    "implementation 'org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3'",
+    "implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.1'",
+    "implementation 'org.jetbrains.kotlinx:kotlinx-datetime:0.6.1'",
+    "implementation 'com.squareup.okio:okio:3.9.0'",
+    "implementation 'co.touchlab:stately-concurrent-collections:2.1.0'",
+    "implementation 'io.ktor:ktor-client-core:3.1.3'",
+    "implementation 'io.ktor:ktor-client-encoding:3.1.3'",
+    "implementation 'io.ktor:ktor-network:3.1.3'",
+    "implementation 'io.ktor:ktor-client-okhttp:3.1.3'",
+    "implementation 'androidx.sqlite:sqlite:2.3.1'",
+    "implementation 'androidx.sqlite:sqlite-framework:2.3.1'",
+    "implementation 'io.coil-kt.coil3:coil-core:3.1.0'",
+    "implementation 'io.coil-kt.coil3:coil-network-okhttp:3.1.0'",
+]
+missing_dependencies = [dep for dep in required_dependencies if dep not in gradle]
+if missing_dependencies:
+    if "dependencies {" in gradle:
+        gradle = gradle.replace("dependencies {", "dependencies {\n    " + "\n    ".join(missing_dependencies), 1)
+    else:
+        gradle += "\n\ndependencies {\n    " + "\n    ".join(missing_dependencies) + "\n}\n"
+    GRADLE.write_text(gradle, encoding="utf-8")
+
 main = MAIN.read_text(encoding="utf-8")
+main = replace_once(main, "    volatile boolean vectorMapFailed = false;", "    volatile boolean vectorMapFailed = false;\n    OsmAndOfflineMapRenderer offlineMapRenderer;", "offline OBF renderer state")
+main = replace_once(main, "        view = new RideView(this);", "        view = new RideView(this);\n        offlineMapRenderer = new OsmAndOfflineMapRenderer(this, () -> { if (view != null) view.postInvalidate(); });", "initialize offline OBF renderer")
+
+# Add an honest, compact source badge over the shared map/HUD surface.
+# MapLibre currently renders the visible cartography online; choosing OsmAnd
+# offline routing must never make the UI falsely imply that the map renderer is offline.
+badge_code = '''
+    private void installMapSourceStatusBadge() {
+        android.widget.FrameLayout root = findViewById(android.R.id.content);
+        if (root == null) return;
+        android.view.View existing = root.findViewWithTag("road_display_map_source_badge");
+        android.widget.TextView badge;
+        if (existing instanceof android.widget.TextView) {
+            badge = (android.widget.TextView) existing;
+        } else {
+            badge = new android.widget.TextView(this);
+            badge.setTag("road_display_map_source_badge");
+            badge.setTextSize(10f);
+            badge.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+            badge.setTextColor(android.graphics.Color.WHITE);
+            badge.setPadding((int) mapBadgeDp(9), (int) mapBadgeDp(5), (int) mapBadgeDp(9), (int) mapBadgeDp(5));
+            android.graphics.drawable.GradientDrawable bg = new android.graphics.drawable.GradientDrawable();
+            bg.setColor(0xDD111111);
+            bg.setCornerRadius(mapBadgeDp(8));
+            bg.setStroke((int) mapBadgeDp(1), 0xFFFFD54F);
+            badge.setBackground(bg);
+            badge.setElevation(mapBadgeDp(8));
+            android.widget.FrameLayout.LayoutParams lp = new android.widget.FrameLayout.LayoutParams(
+                    android.view.ViewGroup.LayoutParams.WRAP_CONTENT, android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
+                    android.view.Gravity.TOP | android.view.Gravity.END);
+            lp.setMargins((int) mapBadgeDp(8), (int) mapBadgeDp(8), (int) mapBadgeDp(8), 0);
+            root.addView(badge, lp);
+        }
+        refreshMapSourceStatusBadge();
+    }
+
+    private float mapBadgeDp(float value) {\n        return value * getResources().getDisplayMetrics().density;\n    }\n\n    private void refreshMapSourceStatusBadge() {
+        android.widget.FrameLayout root = findViewById(android.R.id.content);
+        if (root == null) return;
+        android.view.View view = root.findViewWithTag("road_display_map_source_badge");
+        if (!(view instanceof android.widget.TextView)) return;
+        int mode = getSharedPreferences("road_display", MODE_PRIVATE).getInt("routing_engine_mode", 0);
+        String route = mode == 1 ? "NAV ONLINE" : mode == 2 ? "NAV OFFLINE" : "NAV AUTO";
+        ((android.widget.TextView) view).setText("CARTINA ONLINE · " + route);
+        ((android.widget.TextView) view).setContentDescription("Cartografia online MapLibre; modalità percorso: " + route);
+    }
+
+'''
+# Install the badge after the first content view is attached; the app's ride HUD and
+# expanded map share this activity surface, so the source label stays visible on both.
+content_match = re.search(r"\bsetContentView\([^;]*\);", main)
+if not content_match:
+    raise RuntimeError("map source status badge: could not find setContentView in MainActivity")
+main = main[:content_match.end()] + "\n        installMapSourceStatusBadge();" + main[content_match.end():]
+class_end = main.rfind("\n}")
+if class_end < 0:
+    raise RuntimeError("map source status badge: MainActivity class end not found")
+main = main[:class_end] + "\n" + badge_code + main[class_end:]
+# When local OsmAnd OBF files exist, use the offline vector renderer on all Canvas maps
+# and suppress MapLibre/raster network cartography. Routing mode remains independent.
+main = replace_once(main,
+    """    void setVectorMapExpanded(boolean expanded) {
+        if (vectorMapView == null) return;
+        try {
+            vectorMapView.setVisibility(expanded && vectorMapReady ? View.VISIBLE : View.GONE);
+            if (expanded && vectorMapReady) syncVectorMapCamera(false);
+        } catch (Throwable ignored) {}
+    }""",
+    """    void setVectorMapExpanded(boolean expanded) {
+        if (vectorMapView == null) return;
+        try {
+            boolean localObfCartography = OsmAndOfflineRouter.hasInstalledMaps(this);
+            vectorMapView.setVisibility(expanded && vectorMapReady && !localObfCartography ? View.VISIBLE : View.GONE);
+            if (expanded && vectorMapReady && !localObfCartography) syncVectorMapCamera(false);
+        } catch (Throwable ignored) {}
+    }""", "hide online map when OBF cartography exists")
+main = replace_once(main,
+    "float renderBearing=expanded?mapFrozenBearing:(!Float.isNaN(navigationMatchedBearing)?navigationMatchedBearing:(hasMapBearing?mapBearing:0f));double angle=Math.toRadians(renderBearing);",
+    "float renderBearing=expanded?mapFrozenBearing:(!Float.isNaN(navigationMatchedBearing)?navigationMatchedBearing:(hasMapBearing?mapBearing:0f));\n            if (OsmAndOfflineRouter.hasInstalledMaps(MainActivity.this) && offlineMapRenderer != null) {\n                offlineMapRenderer.draw(c, bounds, lat, lon, zoom, renderBearing, scale, density);\n                return true; // Local OBF is the cartographic source; never silently fetch raster tiles.\n            }\n            double angle=Math.toRadians(renderBearing);",
+    "offline OBF renderer takes precedence over network tiles")
+main = replace_once(main,
+    "        if (view != null) view.releaseTiles();",
+    "        if (view != null) view.releaseTiles();\n        if (offlineMapRenderer != null) offlineMapRenderer.close();",
+    "close offline OBF renderer")
+# Keep the visual source badge truthful independently of the route engine selected.
+main = replace_once(main,
+    """        ((android.widget.TextView) view).setText("CARTINA ONLINE · " + route);
+        ((android.widget.TextView) view).setContentDescription("Cartografia online MapLibre; modalità percorso: " + route);""",
+    """        boolean localObf = OsmAndOfflineRouter.hasInstalledMaps(this);
+        ((android.widget.TextView) view).setText(localObf ? "OFF" : "ON");
+        ((android.widget.TextView) view).setContentDescription((localObf ? "Cartografia vettoriale OsmAnd offline" : "Cartografia online MapLibre") + "; modalità percorso: " + route);""",
+    "truthful offline cartography source badge")
+main = replace_once(main,
+    "    private float mapBadgeDp(float value) {",
+    """    void onOfflineMapsChanged() {
+        refreshMapSourceStatusBadge();
+        if (view != null) {
+            if (view.mapExpanded) setVectorMapExpanded(true);
+            view.postInvalidate();
+        }
+    }
+
+    private float mapBadgeDp(float value) {""",
+    "refresh map UI after OBF install/delete")
+# Match the visual map rotation to the user's two-finger gesture. The map renderer
+# rotates its content by -bearing, so bearing must move opposite to the finger angle.
+main = replace_once(
+    main,
+    "mapFrozenBearing=normalizeBearing(rotateStartBearing+delta); // Match the finger gesture direction; minus delta inverted rotation.",
+    "mapFrozenBearing=normalizeBearing(rotateStartBearing+delta); // Follow the user's two-finger rotation direction.",
+    "full-screen map rotation direction",
+)
+main = replace_once(
+    main,
+    "tripMapBearing=normalizeBearing(tripRotateStartBearing+delta); // Keep trip-map rotation consistent with the main map.",
+    "tripMapBearing=normalizeBearing(tripRotateStartBearing+delta); // Follow the same gesture direction as the full-screen map.",
+    "trip-map rotation direction",
+)
+# The full-screen map is a native MapLibre MapView layered above the Canvas. Its
+# built-in rotate detector has the opposite feel for this app's map-following gesture.
+# Disable only native rotation, retain native pan/zoom, and apply a single custom delta.
+main = replace_once(
+    main,
+    "                    vectorMap = map;\n",
+    "                    vectorMap = map;\n                    map.getUiSettings().setRotateGesturesEnabled(false);\n",
+    "disable native MapLibre rotation gesture",
+)
+main = replace_once(
+    main,
+    "        boolean pinching = false, rotatingMap = false;\n        float rotateStartAngle = 0f, rotateStartBearing = 0f;",
+    "        boolean pinching = false, rotatingMap = false;\n"
+    "        float rotateStartAngle = 0f, rotateStartBearing = 0f;\n"
+    "        boolean vectorRotating = false;\n"
+    "        float vectorRotateStartAngle = 0f, vectorRotateStartBearing = 0f;",
+    "custom full-screen MapLibre rotation state",
+)
+main = replace_once(
+    main,
+    """                    if(action==MotionEvent.ACTION_DOWN){ downX=x; downY=y; movedMap=false; }
+                    if(action==MotionEvent.ACTION_MOVE && Math.hypot(x-downX,y-downY)>dp(8)) movedMap=true;
+                    try { vectorMapView.dispatchTouchEvent(e); } catch (Throwable ignored) {}""",
+    """                    if(action==MotionEvent.ACTION_DOWN){ downX=x; downY=y; movedMap=false; vectorRotating=false; }
+                    if(action==MotionEvent.ACTION_POINTER_DOWN && e.getPointerCount()>=2){
+                        float dx=e.getX(0)-e.getX(1), dy=e.getY(0)-e.getY(1);
+                        vectorRotateStartAngle=(float)Math.toDegrees(Math.atan2(dy,dx));
+                        vectorRotateStartBearing=mapFrozenBearing;
+                        vectorRotating=true; movedMap=true;
+                    }
+                    if(action==MotionEvent.ACTION_MOVE && e.getPointerCount()>=2 && vectorRotating){
+                        float dx=e.getX(0)-e.getX(1), dy=e.getY(0)-e.getY(1);
+                        float angle=(float)Math.toDegrees(Math.atan2(dy,dx));
+                        float delta=angle-vectorRotateStartAngle;
+                        while(delta>180f)delta-=360f; while(delta<-180f)delta+=360f;
+                        mapFrozenBearing=normalizeBearing(vectorRotateStartBearing+delta);
+                        mapUserPanned=true; movedMap=true;
+                        // Change only the bearing: preserve MapLibre's live target and zoom
+                        // so rotation never snaps the map back during a simultaneous pinch.
+                        try {
+                            CameraPosition currentCamera = vectorMap.getCameraPosition();
+                            vectorMap.setCameraPosition(new CameraPosition.Builder()
+                                    .target(currentCamera.target).zoom(currentCamera.zoom)
+                                    .tilt(currentCamera.tilt).bearing(mapFrozenBearing).build());
+                        } catch (Throwable ignored) { }
+                    }
+                    if(action==MotionEvent.ACTION_MOVE && Math.hypot(x-downX,y-downY)>dp(8)) movedMap=true;
+                    if(action==MotionEvent.ACTION_POINTER_UP || action==MotionEvent.ACTION_CANCEL || action==MotionEvent.ACTION_UP)
+                        vectorRotating=false;
+                    try { vectorMapView.dispatchTouchEvent(e); } catch (Throwable ignored) {}""",
+    "manual full-screen MapLibre rotation gesture",
+)
+# Expose map data management in the existing display-settings dialog without
+# replacing or simplifying any of the Ride HUD/settings behavior.
+main = replace_once(
+    main,
+    """            group.setOrientation(android.widget.RadioGroup.VERTICAL);
+            group.setPadding((int)dp(18), (int)dp(8), (int)dp(18), (int)dp(8));
+            final android.widget.RadioButton[] radios = new android.widget.RadioButton[modes.length];""",
+    """            group.setOrientation(android.widget.RadioGroup.VERTICAL);
+            group.setPadding((int)dp(18), (int)dp(8), (int)dp(18), (int)dp(8));
+            LinearLayout settingsLayout = new LinearLayout(MainActivity.this);
+            settingsLayout.setOrientation(LinearLayout.VERTICAL);
+            settingsLayout.addView(group, new LinearLayout.LayoutParams(-1, -2));
+            final android.widget.RadioButton[] radios = new android.widget.RadioButton[modes.length];""",
+    "OsmAnd manager settings container",
+)
+main = replace_once(
+    main,
+    """            group.check(100 + Math.max(0, Math.min(2, displayThemeMode)));
+            String luxText = Float.isNaN(currentAmbientLux) ? "Lettura sensore: non disponibile" : "Lettura sensore: " + Math.round(currentAmbientLux) + " lux";""",
+    """            group.check(100 + Math.max(0, Math.min(2, displayThemeMode)));
+            android.widget.Button osmAndMaps = new android.widget.Button(MainActivity.this);
+            osmAndMaps.setText("MAPPE OFFLINE OSMAND");
+            osmAndMaps.setAllCaps(false);
+            osmAndMaps.setTextSize(12f);
+            osmAndMaps.setMaxLines(1);
+            osmAndMaps.setSingleLine(true);
+            osmAndMaps.setGravity(android.view.Gravity.CENTER);
+            osmAndMaps.setPadding((int)dp(6), 0, (int)dp(6), 0);
+            osmAndMaps.setOnClickListener(v -> OsmAndMapManager.show(MainActivity.this));
+            settingsLayout.addView(osmAndMaps, new LinearLayout.LayoutParams(-1, (int)dp(48)));
+            android.content.SharedPreferences routingPrefs = getSharedPreferences("road_display", MODE_PRIVATE);
+            android.widget.Button routingModeButton = new android.widget.Button(MainActivity.this);
+            int savedRoutingMode = Math.max(0, Math.min(2, routingPrefs.getInt("routing_engine_mode", 0)));
+            String[] routingModeLabels = {"AUTOMATICO · OsmAnd, poi online", "ONLINE · Valhalla / OSRM", "OFFLINE · solo OsmAnd"};
+            String[] routingModeButtonLabels = {"NAV: AUTO", "NAV: ONLINE", "NAV: OFFLINE"};
+            routingModeButton.setText(routingModeButtonLabels[savedRoutingMode]);
+            routingModeButton.setAllCaps(false);
+            // Long routing labels must remain readable inside the settings button on narrow screens.
+            routingModeButton.setTextSize(12f);
+            routingModeButton.setSingleLine(true);
+            routingModeButton.setGravity(android.view.Gravity.CENTER);
+            routingModeButton.setPadding((int)dp(6), 0, (int)dp(6), 0);
+            routingModeButton.setOnClickListener(v -> {
+                android.widget.RadioGroup routingModes = new android.widget.RadioGroup(MainActivity.this);
+                routingModes.setOrientation(android.widget.RadioGroup.VERTICAL);
+                routingModes.setPadding((int)dp(18), (int)dp(8), (int)dp(18), (int)dp(8));
+                for (int i = 0; i < routingModeLabels.length; i++) {
+                    android.widget.RadioButton option = new android.widget.RadioButton(MainActivity.this);
+                    option.setId(200 + i);
+                    option.setText(routingModeLabels[i]);
+                    option.setTextSize(13f);
+                    option.setMaxLines(2);
+                    option.setPadding((int)dp(8), 0, (int)dp(8), 0);
+                    routingModes.addView(option, new android.widget.RadioGroup.LayoutParams(-1, (int)dp(52)));
+                }
+                routingModes.check(200 + Math.max(0, Math.min(2, routingPrefs.getInt("routing_engine_mode", 0))));
+                new AlertDialog.Builder(MainActivity.this).setTitle("MOTORE DI NAVIGAZIONE")
+                    .setMessage("AUTOMATICO: usa OsmAnd se le mappe locali permettono un percorso reale, altrimenti prova online. ONLINE: usa Valhalla e OSRM. OFFLINE: non usa la rete per calcolare il percorso e fallisce se i dati locali non bastano.")
+                    .setView(routingModes).setNegativeButton("ANNULLA", null)
+                    .setPositiveButton("SALVA", (d, which) -> {
+                        int selectedMode = routingModes.getCheckedRadioButtonId() - 200;
+                        if (selectedMode < 0 || selectedMode > 2) selectedMode = 0;
+                        routingPrefs.edit().putInt("routing_engine_mode", selectedMode).apply();
+                        routingModeButton.setText(routingModeButtonLabels[selectedMode]);
+                        refreshMapSourceStatusBadge();
+                    }).show();
+            });
+            settingsLayout.addView(routingModeButton, new LinearLayout.LayoutParams(-1, (int)dp(48)));
+            String luxText = Float.isNaN(currentAmbientLux) ? "Lettura sensore: non disponibile" : "Lettura sensore: " + Math.round(currentAmbientLux) + " lux";""",
+    "OsmAnd manager settings button",
+)
+main = replace_once(
+    main,
+    """.setView(group)
+                .setNegativeButton("ANNULLA", null)""",
+    """.setView(settingsLayout)
+                .setNegativeButton("ANNULLA", null)""",
+    "OsmAnd manager settings view",
+)
+# Prefer the actual OsmAnd Java router when local .obf maps exist. If a map does not
+# cover the route or the offline engine cannot calculate it, keep the current online
+# Valhalla -> OSRM routing path as the fallback.
+main = replace_once(
+    main,
+    """        NavigationRouteResult fetchNavigationRoute(Location start, double destLat, double destLon) throws Exception {
+            // Ask both routing engines concurrently. The first complete, valid result wins;""",
+    """        NavigationRouteResult fetchNavigationRoute(Location start, double destLat, double destLon) throws Exception {
+            int routingMode = MainActivity.this.getSharedPreferences("road_display", MODE_PRIVATE).getInt("routing_engine_mode", 0);
+            if (routingMode != 1 && OsmAndOfflineRouter.hasInstalledMaps(MainActivity.this)) {
+                try {
+                    NavigationRouteResult offline = OsmAndOfflineRouter.calculate(MainActivity.this, start, destLat, destLon);
+                    if (offline != null && offline.route.size() >= 2 && !offline.steps.isEmpty()) return offline;
+                    throw new IllegalStateException("OsmAnd non ha restituito un percorso valido");
+                } catch (Exception offlineFailure) {
+                    android.util.Log.w("RoadDisplay", "OsmAnd offline route unavailable", offlineFailure);
+                    if (routingMode == 2) throw new Exception("MODALITÀ OFFLINE: calcolo OsmAnd fallito. " + OsmAndOfflineRouter.safeMessage(offlineFailure), offlineFailure);
+                }
+            }
+            if (routingMode == 2) throw new Exception("MODALITÀ OFFLINE: " + OsmAndOfflineRouter.installedMapStatus(MainActivity.this));
+            // Ask the existing online routing engines concurrently. Valhalla remains primary;""",
+    "OsmAnd offline-first route selection",
+)
 # Keep valid-but-moderate GNSS fixes alive longer; never treat one weak sample as an immediate outage.
 main = replace_once(
     main,
@@ -503,6 +832,31 @@ print("MAP MATCHING GNSS CONFIDENCE REGRESSION: PASS")
 print("Poor-accuracy fixes are down-weighted; high-accuracy confidence is preserved.")
 ''', encoding="utf-8")
 
+rotation_test = PROJECT / "roadtools/map_rotation_gesture_regression_test.py"
+rotation_test.write_text('''#!/usr/bin/env python3
+"""Regression checks for the full-screen map's two-finger rotation direction."""
+from pathlib import Path
+ROOT = Path(__file__).resolve().parents[1]
+MAIN = (ROOT / "app/src/main/java/com/riccardo/roaddisplay/MainActivity.java").read_text(encoding="utf-8")
+assert "map.getUiSettings().setRotateGesturesEnabled(false);" in MAIN
+assert "vectorRotating=true; movedMap=true;" in MAIN
+assert "mapFrozenBearing=normalizeBearing(vectorRotateStartBearing+delta);" in MAIN
+assert "CameraPosition currentCamera = vectorMap.getCameraPosition();" in MAIN
+assert ".target(currentCamera.target).zoom(currentCamera.zoom)" in MAIN
+assert "mapFrozenBearing=normalizeBearing(rotateStartBearing+delta);" in MAIN
+assert "tripMapBearing=normalizeBearing(tripRotateStartBearing+delta);" in MAIN
+assert "mapFrozenBearing=normalizeBearing(rotateStartBearing-delta);" not in MAIN
+assert "tripMapBearing=normalizeBearing(tripRotateStartBearing-delta);" not in MAIN
+# UI regression: long labels wrap to two lines, shrink, and ellipsize instead of overflowing.
+assert 'String[] routingModeButtonLabels = {"NAV: AUTO", "NAV: ONLINE", "NAV: OFFLINE"};' in MAIN
+assert "routingModeButton.setSingleLine(true);" in MAIN
+assert "routingModeButton.setTextSize(12f);" in MAIN
+assert 'osmAndMaps.setText("MAPPE OFFLINE OSMAND");' in MAIN
+assert "osmAndMaps.setSingleLine(true);" in MAIN
+print("MAP ROTATION GESTURE REGRESSION: PASS")
+print("SETTINGS BUTTON LABEL FIT REGRESSION: PASS")
+''', encoding="utf-8")
+
 print("ONLINE_NAV_PATCH=PASS")
 print("VERSION=3.46.0")
-print("CHANGED=frame-rate-independent marker smoothing; GNSS-aware map matching; speed-limit freshness and anti-spam warnings")
+print("CHANGED=map rotation direction; settings button text fit; frame-rate-independent marker smoothing; GNSS-aware map matching; speed-limit freshness and anti-spam warnings")
