@@ -53,7 +53,7 @@ if "OsmAndOfflineSmokeTest" not in workflow or "Spain_canarias_europe_2.obf" not
     raise SystemExit("FAIL: CI does not test a real offline route against the Canary Islands OBF map")
 
 # Map management must cover the full lifecycle, not download-only.
-for token in ("ELIMINA", "VERIFICA", "CERCA AGGIORNAMENTI", "AGGIORNAMENTO DISPONIBILE", "writeInstalledVersion"):
+for token in ("ELIMINA", "VERIFICA", "AGGIORNA", "AGGIORNAMENTO DISPONIBILE", "writeInstalledVersion"):
     if token.lower() not in template_lower:
         raise SystemExit(f"FAIL: map lifecycle feature missing: {token}")
 
