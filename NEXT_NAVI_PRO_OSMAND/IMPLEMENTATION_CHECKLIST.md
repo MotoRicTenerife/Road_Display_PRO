@@ -4,10 +4,10 @@
 - [x] Create isolated OsmAnd-based rebuild branch.
 - [x] Add CI workflow to checkout official OsmAnd and companion repositories.
 - [x] Install the workflow on the default branch so draft-PR checks can execute.
-- [ ] Obtain a successful upstream baseline build in CI.
-- [ ] Pin all upstream repository revisions from a successful build.
+- [x] Obtain a successful upstream baseline build in CI (workflow run #8).
+- [x] Pin all upstream repository revisions from the successful build.
 - [ ] Archive build logs and exact toolchain versions.
-- [ ] Confirm debug APK installs and launches on Android 16.
+- [ ] Confirm debug APK installs and launches on Android 16 (not yet tested on a physical device).
 
 ## Functional navigation
 - [ ] Map visible after cold start.
