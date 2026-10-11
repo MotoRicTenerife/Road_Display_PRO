@@ -87,6 +87,22 @@ jobs:
             java -version 2>&1
           } | tee upstream-revisions.txt
 
+      - name: Apply NEXT NAVI PRO app label
+        working-directory: android
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("OsmAnd/build.gradle")
+          s = p.read_text()
+          old = 'resValue "string", "app_name", "OsmAnd Nightly"'
+          new = 'resValue "string", "app_name", "NEXT NAVI PRO"'
+          if s.count(old) != 1:
+              raise SystemExit(f"Expected one upstream app-name value, found {s.count(old)}")
+          p.write_text(s.replace(old, new))
+          print("Set the debug app label to NEXT NAVI PRO")
+          PY
+
       - name: Set up JDK
         uses: actions/setup-java@v5
         with:
