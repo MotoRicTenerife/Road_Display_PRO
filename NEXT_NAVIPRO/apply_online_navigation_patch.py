@@ -62,7 +62,14 @@ main = replace_once(
             String luxText = Float.isNaN(currentAmbientLux) ? "Lettura sensore: non disponibile" : "Lettura sensore: " + Math.round(currentAmbientLux) + " lux";""",
     "OsmAnd manager settings button",
 )
-main = replace_once(main, ".setView(group)\\n                .setNegativeButton(\"ANNULLA\", null)", ".setView(settingsLayout)\\n                .setNegativeButton(\"ANNULLA\", null)", "OsmAnd manager settings view")
+main = replace_once(
+    main,
+    """.setView(group)
+                .setNegativeButton("ANNULLA", null)""",
+    """.setView(settingsLayout)
+                .setNegativeButton("ANNULLA", null)""",
+    "OsmAnd manager settings view",
+)
 # Keep valid-but-moderate GNSS fixes alive longer; never treat one weak sample as an immediate outage.
 main = replace_once(
     main,
