@@ -131,15 +131,15 @@ badge_code = '''
 content_match = re.search(r"\\bsetContentView\\([^;]*\\);", main)
 if not content_match:
     raise RuntimeError("map source status badge: could not find setContentView in MainActivity")
-main = main[:content_match.end()] + "\\n        installMapSourceStatusBadge();" + main[content_match.end():]
-class_end = main.rfind("\\n}")
+main = main[:content_match.end()] + "\n        installMapSourceStatusBadge();" + main[content_match.end():]
+class_end = main.rfind("\n}")
 if class_end < 0:
     raise RuntimeError("map source status badge: MainActivity class end not found")
-main = main[:class_end] + "\\n" + badge_code + main[class_end:]
+main = main[:class_end] + "\n" + badge_code + main[class_end:]
 main = replace_once(
     main,
     "routingModeButton.setText(routingModeButtonLabels[selectedMode]);",
-    "routingModeButton.setText(routingModeButtonLabels[selectedMode]);\\n                        refreshMapSourceStatusBadge();",
+    "routingModeButton.setText(routingModeButtonLabels[selectedMode]);\n                        refreshMapSourceStatusBadge();",
     "refresh map source badge after routing mode change",
 )
 # Match the visual map rotation to the user's two-finger gesture. The map renderer
