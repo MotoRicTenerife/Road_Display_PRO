@@ -21,8 +21,9 @@ required_template = (
     "OsmAnd route engine is wired",
     "routing offline non attivo",
 )
+template_lower = template.lower()
 for token in required_template:
-    if token not in template:
+    if token.lower() not in template_lower:
         raise SystemExit(f"FAIL: OsmAnd map manager missing required contract token: {token}")
 
 if "shutil.copyfile(MAP_MANAGER_TEMPLATE, MAP_MANAGER)" not in patch:
