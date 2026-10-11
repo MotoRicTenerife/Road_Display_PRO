@@ -84,7 +84,7 @@ if missing_dependencies:
 
 main = MAIN.read_text(encoding="utf-8")
 main = replace_once(main, "    volatile boolean vectorMapFailed = false;", "    volatile boolean vectorMapFailed = false;\n    OsmAndOfflineMapRenderer offlineMapRenderer;", "offline OBF renderer state")
-main = replace_once(main, "        view = new RideView(this);", "        view = new RideView(this);\n        offlineMapRenderer = new OsmAndOfflineMapRenderer(this);", "initialize offline OBF renderer")
+main = replace_once(main, "        view = new RideView(this);", "        view = new RideView(this);\n        offlineMapRenderer = new OsmAndOfflineMapRenderer(this, () -> { if (view != null) view.postInvalidate(); });", "initialize offline OBF renderer")
 
 # Add an honest, compact source badge over the shared map/HUD surface.
 # MapLibre currently renders the visible cartography online; choosing OsmAnd
