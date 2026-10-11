@@ -207,6 +207,14 @@ jobs:
           echo 'Effective AndroidX setting:'
           grep '^android.useAndroidX=' gradle.properties
           test "$(grep '^android.useAndroidX=' gradle.properties | tail -n 1)" = 'android.useAndroidX=true'
+          if grep -q '^android.enableGlobalSyntheticsGeneration=' gradle.properties; then
+            sed -i 's/^android.enableGlobalSyntheticsGeneration=.*/android.enableGlobalSyntheticsGeneration=true/' gradle.properties
+          else
+            echo 'android.enableGlobalSyntheticsGeneration=true' >> gradle.properties
+          fi
+          echo 'Effective global synthetics setting:'
+          grep '^android.enableGlobalSyntheticsGeneration=' gradle.properties
+          test "$(grep '^android.enableGlobalSyntheticsGeneration=' gradle.properties | tail -n 1)" = 'android.enableGlobalSyntheticsGeneration=true'
 
       - name: Setup Java 17
         uses: actions/setup-java@v4
