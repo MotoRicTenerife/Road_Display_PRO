@@ -17,7 +17,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: osmand-baseline-${{ github.ref }}
@@ -125,7 +125,7 @@ jobs:
           chmod +x gradlew
           printf '\norg.gradle.jvmargs=-Xmx3g -XX:+HeapDumpOnOutOfMemoryError -Dfile.encoding=UTF-8\n' >> gradle.properties
 
-      - name: Build official OsmAnd debug APK
+      - name: Build OsmAnd ARM64 debug APK
         working-directory: android
         shell: bash
         run: |
@@ -138,7 +138,7 @@ jobs:
           find android/OsmAnd/build/outputs/apk -type f -name '*.apk' -print
           test -n "$(find android/OsmAnd/build/outputs/apk -type f -name '*.apk' -print -quit)"
 
-      - name: Upload build diagnostics (always)
+      - name: Upload build diagnostics
         if: always()
         uses: actions/upload-artifact@v6
         with:
@@ -149,11 +149,25 @@ jobs:
           if-no-files-found: warn
           retention-days: 30
 
-      - name: Upload debug APK
+      - name: Upload ARM64 APK artifact
         if: success()
         uses: actions/upload-artifact@v6
         with:
-          name: next-navi-pro-osmand-baseline-${{ github.run_number }}
+          name: next-navi-pro-osmand-arm64-${{ github.run_number }}
           path: android/OsmAnd/build/outputs/apk/**/*.apk
           if-no-files-found: error
           retention-days: 30
+
+      - name: Publish direct APK download
+        if: success() && github.event_name != 'pull_request'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: next-navi-pro-test-${{ github.run_number }}
+          name: NEXT NAVI PRO test build ${{ github.run_number }}
+          prerelease: true
+          generate_release_notes: false
+          body: |
+            Test build based on official OsmAnd source with the app label changed to NEXT NAVI PRO.
+            This is not yet the custom navigation UI build and has not been verified on a physical device.
+            ARM64 APK for Android devices such as Samsung Galaxy S22 Ultra.
+          files: android/OsmAnd/build/outputs/apk/**/*.apk
