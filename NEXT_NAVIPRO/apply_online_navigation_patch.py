@@ -54,6 +54,7 @@ required_dependencies = [
     "implementation 'com.vividsolutions:jts-core:1.14.0'",
     "implementation 'com.google.openlocationcode:openlocationcode:1.0.4'",
     "implementation 'net.sf.kxml:kxml2:2.1.8'",
+    "implementation 'net.sf.trove4j:trove4j:3.0.3'",
 ]
 missing_dependencies = [dep for dep in required_dependencies if dep not in gradle]
 if missing_dependencies:
