@@ -171,6 +171,7 @@ public final class OsmAndMapManager {
                             filter.run();
                             status.setText(deleted ? "Mappa eliminata: " + humanName(item.fileName)
                                     : "Impossibile eliminare la mappa. Controlla lo spazio e i permessi.");
+                            if (deleted && context instanceof MainActivity) ((MainActivity) context).onOfflineMapsChanged();
                         });
                     })).show();
         });
@@ -418,7 +419,7 @@ public final class OsmAndMapManager {
                 }
                 if (backup.exists()) backup.delete();
                 writeInstalledVersion(new File(mapsDir, target.getName() + ".version"), item.updated);
-                MAIN.post(() -> { progress.dismiss(); success.run(); });
+                MAIN.post(() -> { progress.dismiss(); success.run(); if (context instanceof MainActivity) ((MainActivity) context).onOfflineMapsChanged(); });
             } catch (Exception e) {
                 MAIN.post(() -> {
                     progress.dismiss();
