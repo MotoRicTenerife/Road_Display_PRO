@@ -32,6 +32,7 @@ jobs:
         with:
           repository: osmandapp/OsmAnd
           path: android
+          ref: 96cbea0fb2bca3a82c7ff36bfbe2add1f472970f
           fetch-depth: 1
 
       - name: Checkout OsmAnd resources
@@ -39,6 +40,7 @@ jobs:
         with:
           repository: osmandapp/OsmAnd-resources
           path: resources
+          ref: b981dac242961d9de6135b1b0ff82cabd8f55a7d
           fetch-depth: 1
 
       - name: Checkout OsmAnd core
@@ -46,6 +48,7 @@ jobs:
         with:
           repository: osmandapp/OsmAnd-core
           path: core
+          ref: 69f9df37c09463732b6c0360b01859555566dc28
           fetch-depth: 1
 
       - name: Checkout OsmAnd core legacy
@@ -53,6 +56,7 @@ jobs:
         with:
           repository: osmandapp/OsmAnd-core-legacy
           path: core-legacy
+          ref: 7a1bb2c565ebf714b5a6bd06d1de23792c9a20b6
           fetch-depth: 1
 
       - name: Checkout OsmAnd build scripts
@@ -60,6 +64,7 @@ jobs:
         with:
           repository: osmandapp/OsmAnd-build
           path: build
+          ref: 54356f2a6d1d07fe67510a25ec7912c0c63b277d
           fetch-depth: 1
 
       - name: Checkout OsmAnd tools
@@ -67,6 +72,7 @@ jobs:
         with:
           repository: osmandapp/OsmAnd-tools
           path: tools
+          ref: 84d3b721d70e9e8d7ac84275b4f65275b8b1c1e6
           fetch-depth: 1
 
       - name: Checkout OsmAnd misc resources
@@ -74,6 +80,7 @@ jobs:
         with:
           repository: osmandapp/OsmAnd-misc
           path: misc
+          ref: 3fa7f2334740b3de68cd604725ebd02dc114d205
           fetch-depth: 1
 
       - name: Record upstream revisions
