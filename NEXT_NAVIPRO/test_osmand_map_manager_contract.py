@@ -34,7 +34,7 @@ if "python3 NEXT_NAVIPRO/test_osmand_map_manager_contract.py" not in workflow:
     raise SystemExit("FAIL: CI does not run the map manager contract test")
 
 # The app must be honest: downloading .obf files is not itself proof of offline routing.
-if "does not claim offline navigation" not in template and "routing offline non attivo" not in template:
+if "does not claim offline navigation" not in template_lower and "routing offline non attivo" not in template_lower:
     raise SystemExit("FAIL: missing explicit guard against claiming unimplemented offline routing")
 
 print("PASS: official OsmAnd catalog/download contract present")
