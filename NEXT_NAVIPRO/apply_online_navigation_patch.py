@@ -94,6 +94,51 @@ main = replace_once(
     "tripMapBearing=normalizeBearing(tripRotateStartBearing-delta); // Keep trip-map rotation consistent with the main map.",
     "trip-map rotation direction",
 )
+# The full-screen map is a native MapLibre MapView layered above the Canvas. Its
+# built-in rotate detector has the opposite feel for this app's map-following gesture.
+# Disable only native rotation, retain native pan/zoom, and apply a single custom delta.
+main = replace_once(
+    main,
+    "                    vectorMap = map;\n",
+    "                    vectorMap = map;\n                    map.getUiSettings().setRotateGesturesEnabled(false);\n",
+    "disable native MapLibre rotation gesture",
+)
+main = replace_once(
+    main,
+    "        boolean pinching = false, rotatingMap = false;\n        float rotateStartAngle = 0f, rotateStartBearing = 0f;",
+    "        boolean pinching = false, rotatingMap = false;\n"
+    "        float rotateStartAngle = 0f, rotateStartBearing = 0f;\n"
+    "        boolean vectorRotating = false;\n"
+    "        float vectorRotateStartAngle = 0f, vectorRotateStartBearing = 0f;",
+    "custom full-screen MapLibre rotation state",
+)
+main = replace_once(
+    main,
+    """                    if(action==MotionEvent.ACTION_DOWN){ downX=x; downY=y; movedMap=false; }
+                    if(action==MotionEvent.ACTION_MOVE && Math.hypot(x-downX,y-downY)>dp(8)) movedMap=true;
+                    try { vectorMapView.dispatchTouchEvent(e); } catch (Throwable ignored) {}""",
+    """                    if(action==MotionEvent.ACTION_DOWN){ downX=x; downY=y; movedMap=false; vectorRotating=false; }
+                    if(action==MotionEvent.ACTION_POINTER_DOWN && e.getPointerCount()>=2){
+                        float dx=e.getX(0)-e.getX(1), dy=e.getY(0)-e.getY(1);
+                        vectorRotateStartAngle=(float)Math.toDegrees(Math.atan2(dy,dx));
+                        vectorRotateStartBearing=mapFrozenBearing;
+                        vectorRotating=true; movedMap=true;
+                    }
+                    if(action==MotionEvent.ACTION_MOVE && e.getPointerCount()>=2 && vectorRotating){
+                        float dx=e.getX(0)-e.getX(1), dy=e.getY(0)-e.getY(1);
+                        float angle=(float)Math.toDegrees(Math.atan2(dy,dx));
+                        float delta=angle-vectorRotateStartAngle;
+                        while(delta>180f)delta-=360f; while(delta<-180f)delta+=360f;
+                        mapFrozenBearing=normalizeBearing(vectorRotateStartBearing-delta);
+                        mapUserPanned=true; movedMap=true;
+                        syncVectorMapCamera(false);
+                    }
+                    if(action==MotionEvent.ACTION_MOVE && Math.hypot(x-downX,y-downY)>dp(8)) movedMap=true;
+                    if(action==MotionEvent.ACTION_POINTER_UP || action==MotionEvent.ACTION_CANCEL || action==MotionEvent.ACTION_UP)
+                        vectorRotating=false;
+                    try { vectorMapView.dispatchTouchEvent(e); } catch (Throwable ignored) {}""",
+    "manual full-screen MapLibre rotation gesture",
+)
 # Expose map data management in the existing display-settings dialog without
 # replacing or simplifying any of the Ride HUD/settings behavior.
 main = replace_once(
@@ -678,6 +723,9 @@ rotation_test.write_text('''#!/usr/bin/env python3
 from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 MAIN = (ROOT / "app/src/main/java/com/riccardo/roaddisplay/MainActivity.java").read_text(encoding="utf-8")
+assert "map.getUiSettings().setRotateGesturesEnabled(false);" in MAIN
+assert "vectorRotating=true; movedMap=true;" in MAIN
+assert "mapFrozenBearing=normalizeBearing(vectorRotateStartBearing-delta);" in MAIN
 assert "mapFrozenBearing=normalizeBearing(rotateStartBearing-delta);" in MAIN
 assert "tripMapBearing=normalizeBearing(tripRotateStartBearing-delta);" in MAIN
 assert "mapFrozenBearing=normalizeBearing(rotateStartBearing+delta);" not in MAIN
