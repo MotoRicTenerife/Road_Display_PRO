@@ -94,7 +94,7 @@ public final class OsmAndMapManager {
         ListView list = new ListView(context);
         root.addView(list, new LinearLayout.LayoutParams(-1, dp(context, 300)));
         TextView note = new TextView(context);
-        note.setText("I file .obf contengono dati vettoriali stradali. Il download, da solo, non attiva il routing offline: il motore OsmAnd deve essere collegato e verificato separatamente.");
+        note.setText("I file .obf contengono dati vettoriali stradali. Il download, da solo, non attiva il routing offline: il motore OsmAnd deve calcolare un percorso reale. Dati cartografici © OpenStreetMap contributors (ODbL); pacchetti distribuiti da OsmAnd.");
         note.setTextSize(12f);
         root.addView(note, new LinearLayout.LayoutParams(-1, ViewGroup.LayoutParams.WRAP_CONTENT));
 
