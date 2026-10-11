@@ -98,23 +98,23 @@ badge_code = '''
             badge.setTextSize(10f);
             badge.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
             badge.setTextColor(android.graphics.Color.WHITE);
-            badge.setPadding((int) dp(9), (int) dp(5), (int) dp(9), (int) dp(5));
+            badge.setPadding((int) mapBadgeDp(9), (int) mapBadgeDp(5), (int) mapBadgeDp(9), (int) mapBadgeDp(5));
             android.graphics.drawable.GradientDrawable bg = new android.graphics.drawable.GradientDrawable();
             bg.setColor(0xDD111111);
-            bg.setCornerRadius(dp(8));
-            bg.setStroke((int) dp(1), 0xFFFFD54F);
+            bg.setCornerRadius(mapBadgeDp(8));
+            bg.setStroke((int) mapBadgeDp(1), 0xFFFFD54F);
             badge.setBackground(bg);
-            badge.setElevation(dp(8));
+            badge.setElevation(mapBadgeDp(8));
             android.widget.FrameLayout.LayoutParams lp = new android.widget.FrameLayout.LayoutParams(
                     android.view.ViewGroup.LayoutParams.WRAP_CONTENT, android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
                     android.view.Gravity.TOP | android.view.Gravity.END);
-            lp.setMargins((int) dp(8), (int) dp(8), (int) dp(8), 0);
+            lp.setMargins((int) mapBadgeDp(8), (int) mapBadgeDp(8), (int) mapBadgeDp(8), 0);
             root.addView(badge, lp);
         }
         refreshMapSourceStatusBadge();
     }
 
-    private void refreshMapSourceStatusBadge() {
+    private float mapBadgeDp(float value) {\n        return value * getResources().getDisplayMetrics().density;\n    }\n\n    private void refreshMapSourceStatusBadge() {
         android.widget.FrameLayout root = findViewById(android.R.id.content);
         if (root == null) return;
         android.view.View view = root.findViewWithTag("road_display_map_source_badge");
