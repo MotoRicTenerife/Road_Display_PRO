@@ -271,7 +271,8 @@ final class OsmAndOfflineMapRenderer {
             } catch (Throwable error) {
                 status = "ERRORE LETTURA MAPPA OSMAND";
                 android.util.Log.w("RoadDisplay", "Offline OBF map render failed", error);
-                features = Collections.emptyList();
+                // Keep the last complete viewport on transient read failures instead of
+                // clearing it and exposing a blank map while the next query retries.
             } finally {
                 loading = false;
             }

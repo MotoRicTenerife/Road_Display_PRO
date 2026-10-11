@@ -28,10 +28,17 @@ public class OsmAndOfflineSmokeTest {
             try {
                 int centerX = MapUtils.get31TileNumberX(-16.7260);
                 int centerY = MapUtils.get31TileNumberY(28.1218);
-                int radius31 = 450000;
+                int radius31 = 250000;
+                BinaryMapIndexReader.SearchFilter highwaysOnly = (types, index) -> {
+                    for (int i = 0; i < types.size(); i++) {
+                        BinaryMapIndexReader.TagValuePair pair = index.decodeType(types.get(i));
+                        if (pair != null && "highway".equals(pair.tag)) return true;
+                    }
+                    return false;
+                };
                 List<BinaryMapDataObject> objects = reader.searchMapIndex(
                         BinaryMapIndexReader.buildSearchRequest(centerX - radius31, centerX + radius31,
-                                centerY - radius31, centerY + radius31, 15, null));
+                                centerY - radius31, centerY + radius31, 15, highwaysOnly));
                 assertNotNull("Offline viewport query must return a result list", objects);
                 assertTrue("Adeje offline viewport must contain map features for rendering", !objects.isEmpty());
 
