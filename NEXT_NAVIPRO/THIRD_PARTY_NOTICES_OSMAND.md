@@ -4,6 +4,7 @@
 
 - Upstream project: https://github.com/osmandapp/Osmand
 - Pinned source revision: cacaa5fe1499af8806210de6f81293f925847043
+- Pinned OsmAnd-resources revision: b981dac242961d9de6135b1b0ff82cabd8f55a7d
 - License: GNU General Public License v3.0 (GPL-3.0), as stated by the upstream project.
 - Used components: OsmAnd-java routing classes/resources and the corresponding OsmAnd-shared Android runtime.
 - ROAD DISPLAY PRO integration code: NEXT_NAVIPRO/templates/OsmAndOfflineRouter.java, NEXT_NAVIPRO/templates/PlatformUtil.java, and the integration patch in NEXT_NAVIPRO/apply_online_navigation_patch.py.
