@@ -65,9 +65,13 @@ jobs:
           test -s OsmAnd-shared/build/outputs/aar/OsmAnd-shared-debug.aar
           mkdir -p "$GITHUB_WORKSPACE/osmand-routing-libraries"
           cp OsmAnd-java/build/libs/OsmAnd-java-android-master-snapshot-android.jar "$GITHUB_WORKSPACE/osmand-routing-libraries/"
-          find OsmAnd-shared/build/libs -maxdepth 1 -type f -name '*.jar' -exec cp {} "$GITHUB_WORKSPACE/osmand-routing-libraries/" \;
+          cp OsmAnd-shared/build/outputs/aar/OsmAnd-shared-debug.aar "$GITHUB_WORKSPACE/osmand-routing-libraries/"
+          if [ -d OsmAnd-shared/build/libs ]; then
+            find OsmAnd-shared/build/libs -maxdepth 1 -type f -name '*.jar' -exec cp {} "$GITHUB_WORKSPACE/osmand-routing-libraries/" \; || true
+          fi
           ls -lh "$GITHUB_WORKSPACE/osmand-routing-libraries"
-          test "$(find "$GITHUB_WORKSPACE/osmand-routing-libraries" -maxdepth 1 -type f -name '*.jar' | wc -l)" -ge 2
+          test -s "$GITHUB_WORKSPACE/osmand-routing-libraries/OsmAnd-shared-debug.aar"
+          test -s "$GITHUB_WORKSPACE/osmand-routing-libraries/OsmAnd-java-android-master-snapshot-android.jar"
 
       - name: Upload pinned OsmAnd runtime libraries
         uses: actions/upload-artifact@v4
