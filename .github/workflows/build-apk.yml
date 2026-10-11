@@ -131,15 +131,15 @@ jobs:
           s = re.sub(r"""(id\s*\(?\s*['"]com\.android\.application['"]\s*\)?\s+version\s+['"])[^'"]+(['"])""", r"\g<1>8.6.1\2", s)
           s = re.sub(r"(com\.android\.tools\.build:gradle:)[0-9.]+", r"\g<1>8.6.1", s)
           if s == original:
-              # Some archive variants keep the version in settings.gradle or omit
-              # it from the root plugin block. Pin it deterministically at the root.
+              # The archived project already declares the Android application plugin
+              # (often at the target version). Do not append a second request for the
+              # same plugin: Gradle rejects duplicate plugin IDs in one plugins block.
+              # Only add a root declaration if neither root build.gradle nor settings.gradle
+              # declares it at all.
               settings = Path("Road_Display_PRO/settings.gradle")
-              if settings.exists():
-                  settings_original = settings.read_text(encoding="utf-8")
-                  settings_text = re.sub(r"""(id\s*\(?\s*['"]com\.android\.application['"]\s*\)?\s+version\s+['"])[^'"]+(['"])""", r"\g<1>8.6.1\2", settings_original)
-                  if settings_text != settings_original:
-                      settings.write_text(settings_text, encoding="utf-8")
-              s = s.rstrip() + "\n\nplugins {\n    id 'com.android.application' version '8.6.1' apply false\n}\n"
+              settings_text = settings.read_text(encoding="utf-8") if settings.exists() else ""
+              if "com.android.application" not in s and "com.android.application" not in settings_text:
+                  s = s.rstrip() + "\n\nplugins {\n    id 'com.android.application' version '8.6.1' apply false\n}\n"
           p.write_text(s, encoding="utf-8")
           print("Effective Android Gradle Plugin declaration:")
           print("\n".join(line.strip() for line in s.splitlines() if "com.android.application" in line or "com.android.tools.build:gradle:" in line))
