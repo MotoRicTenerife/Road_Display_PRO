@@ -136,12 +136,6 @@ class_end = main.rfind("\n}")
 if class_end < 0:
     raise RuntimeError("map source status badge: MainActivity class end not found")
 main = main[:class_end] + "\n" + badge_code + main[class_end:]
-main = replace_once(
-    main,
-    "routingModeButton.setText(routingModeButtonLabels[selectedMode]);",
-    "routingModeButton.setText(routingModeButtonLabels[selectedMode]);\n                        refreshMapSourceStatusBadge();",
-    "refresh map source badge after routing mode change",
-)
 # Match the visual map rotation to the user's two-finger gesture. The map renderer
 # rotates its content by -bearing, so bearing must move opposite to the finger angle.
 main = replace_once(
@@ -272,6 +266,7 @@ main = replace_once(
                         if (selectedMode < 0 || selectedMode > 2) selectedMode = 0;
                         routingPrefs.edit().putInt("routing_engine_mode", selectedMode).apply();
                         routingModeButton.setText(routingModeButtonLabels[selectedMode]);
+                        refreshMapSourceStatusBadge();
                     }).show();
             });
             settingsLayout.addView(routingModeButton, new LinearLayout.LayoutParams(-1, (int)dp(48)));
