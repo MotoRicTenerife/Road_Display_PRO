@@ -247,17 +247,15 @@ public final class OsmAndMapManager {
                 c.setRequestProperty("Accept", "text/plain,*/*");
                 if (c.getResponseCode() != HttpURLConnection.HTTP_OK)
                     throw new IllegalStateException("Catalogo HTTP " + c.getResponseCode());
-                ArrayList<MapItem> found = new ArrayList<>();
+                StringBuilder rawCatalog = new StringBuilder();
                 try (BufferedReader reader = new BufferedReader(new InputStreamReader(
                         new BufferedInputStream(c.getInputStream()), StandardCharsets.UTF_8))) {
                     String line;
-                    while ((line = reader.readLine()) != null) {
-                        Matcher m = CATALOG_LINE.matcher(line);
-                        if (m.matches()) found.add(new MapItem(m.group(1), m.group(2).trim(),
-                                m.group(3), m.group(4).trim()));
-                    }
+                    while ((line = reader.readLine()) != null) rawCatalog.append(line).append('\\n');
                 }
-                if (found.isEmpty()) throw new IllegalStateException("Formato catalogo non riconosciuto");
+                ArrayList<MapItem> found = parseCatalog(rawCatalog.toString());
+                if (found.isEmpty()) throw new IllegalStateException(
+                        "Formato catalogo non riconosciuto (HTML/Markdown/testo non compatibile)");
                 MAIN.post(() -> {
                     all.clear(); all.addAll(found);
                     String q = query == null || query.trim().isEmpty() ? "Canarias" : query;
@@ -278,6 +276,63 @@ public final class OsmAndMapManager {
                         + ". Verifica la connessione e riprova."));
             } finally { if (c != null) c.disconnect(); }
         });
+    }
+
+    /**
+     * OsmAnd's public list endpoint has been served in more than one format.
+     * Accept its HTML table, Markdown-rendered table, and the older pipe-delimited
+     * text format rather than silently showing an empty list when the format changes.
+     */
+    private static ArrayList<MapItem> parseCatalog(String raw) {
+        ArrayList<MapItem> result = new ArrayList<>();
+        if (raw == null || raw.trim().isEmpty()) return result;
+
+        Pattern rowPattern = Pattern.compile("(?is)<tr\\b[^>]*>(.*?)</tr>");
+        Pattern cellPattern = Pattern.compile("(?is)<t[dh]\\b[^>]*>(.*?)</t[dh]>");
+        Pattern filePattern = Pattern.compile("([A-Za-z0-9._-]+\\.obf\\.zip)", Pattern.CASE_INSENSITIVE);
+        Matcher rows = rowPattern.matcher(raw);
+        while (rows.find()) {
+            ArrayList<String> cells = new ArrayList<>();
+            Matcher cellMatcher = cellPattern.matcher(rows.group(1));
+            while (cellMatcher.find()) cells.add(cleanCatalogCell(cellMatcher.group(1)));
+            if (cells.size() < 4) continue;
+            Matcher fileMatcher = filePattern.matcher(cells.get(0));
+            if (!fileMatcher.find()) continue;
+            String size = cells.get(2).replace(',', '.').replaceAll("[^0-9.]", "");
+            if (size.isEmpty()) size = "0";
+            result.add(new MapItem(fileMatcher.group(1), cells.get(1), size, cells.get(3)));
+        }
+        if (!result.isEmpty()) return result;
+
+        // Markdown table (including linked filenames) or legacy pipe-delimited rows.
+        Pattern tablePattern = Pattern.compile(
+                "^\\s*\\|?\\s*(?:\\[([^\\]]+\\.obf\\.zip)\\]\\([^)]*\\)|([A-Za-z0-9._-]+\\.obf\\.zip))\\s*\\|\\s*([^|]+)\\|\\s*([0-9]+(?:[.,][0-9]+)?)\\s*\\|\\s*(.*?)\\s*\\|?\\s*$",
+                Pattern.CASE_INSENSITIVE);
+        String[] lines = raw.split("\\r?\\n");
+        for (String line : lines) {
+            Matcher m = tablePattern.matcher(line);
+            if (m.matches()) {
+                String filename = m.group(1) != null ? m.group(1) : m.group(2);
+                result.add(new MapItem(filename, cleanCatalogCell(m.group(3)).trim(),
+                        m.group(4).replace(',', '.'), cleanCatalogCell(m.group(5)).trim()));
+                continue;
+            }
+            Matcher legacy = CATALOG_LINE.matcher(line);
+            if (legacy.matches()) {
+                result.add(new MapItem(legacy.group(1), cleanCatalogCell(legacy.group(2)).trim(),
+                        legacy.group(3), cleanCatalogCell(legacy.group(4)).trim()));
+            }
+        }
+        return result;
+    }
+
+    private static String cleanCatalogCell(String value) {
+        if (value == null) return "";
+        return value.replaceAll("(?is)<[^>]+>", " ")
+                .replace("&nbsp;", " ").replace("&#160;", " ")
+                .replace("&amp;", "&").replace("&quot;", "\\\"")
+                .replace("&#39;", "'").replace("&lt;", "<").replace("&gt;", ">")
+                .replaceAll("\\s+", " ").trim();
     }
 
     private static void downloadAndInstall(Context context, MapItem item, File mapsDir,
