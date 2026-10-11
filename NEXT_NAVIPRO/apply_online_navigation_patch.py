@@ -105,6 +105,34 @@ main = replace_once(
             osmAndMaps.setAllCaps(false);
             osmAndMaps.setOnClickListener(v -> OsmAndMapManager.show(MainActivity.this));
             settingsLayout.addView(osmAndMaps, new LinearLayout.LayoutParams(-1, (int)dp(48)));
+            android.content.SharedPreferences routingPrefs = getSharedPreferences("road_display", MODE_PRIVATE);
+            android.widget.Button routingModeButton = new android.widget.Button(MainActivity.this);
+            int savedRoutingMode = Math.max(0, Math.min(2, routingPrefs.getInt("routing_engine_mode", 0)));
+            String[] routingModeLabels = {"AUTOMATICO · OsmAnd offline prioritario", "ONLINE · Valhalla / OSRM", "OFFLINE · solo OsmAnd"};
+            routingModeButton.setText("MOTORE NAVIGAZIONE · " + routingModeLabels[savedRoutingMode]);
+            routingModeButton.setAllCaps(false);
+            routingModeButton.setOnClickListener(v -> {
+                android.widget.RadioGroup routingModes = new android.widget.RadioGroup(MainActivity.this);
+                routingModes.setOrientation(android.widget.RadioGroup.VERTICAL);
+                routingModes.setPadding((int)dp(18), (int)dp(8), (int)dp(18), (int)dp(8));
+                for (int i = 0; i < routingModeLabels.length; i++) {
+                    android.widget.RadioButton option = new android.widget.RadioButton(MainActivity.this);
+                    option.setId(200 + i);
+                    option.setText(routingModeLabels[i]);
+                    routingModes.addView(option, new android.widget.RadioGroup.LayoutParams(-1, (int)dp(48)));
+                }
+                routingModes.check(200 + Math.max(0, Math.min(2, routingPrefs.getInt("routing_engine_mode", 0))));
+                new AlertDialog.Builder(MainActivity.this).setTitle("MOTORE DI NAVIGAZIONE")
+                    .setMessage("AUTOMATICO: usa OsmAnd se le mappe locali permettono un percorso reale, altrimenti prova online. ONLINE: usa Valhalla e OSRM. OFFLINE: non usa la rete per calcolare il percorso e fallisce se i dati locali non bastano.")
+                    .setView(routingModes).setNegativeButton("ANNULLA", null)
+                    .setPositiveButton("SALVA", (d, which) -> {
+                        int selectedMode = routingModes.getCheckedRadioButtonId() - 200;
+                        if (selectedMode < 0 || selectedMode > 2) selectedMode = 0;
+                        routingPrefs.edit().putInt("routing_engine_mode", selectedMode).apply();
+                        routingModeButton.setText("MOTORE NAVIGAZIONE · " + routingModeLabels[selectedMode]);
+                    }).show();
+            });
+            settingsLayout.addView(routingModeButton, new LinearLayout.LayoutParams(-1, (int)dp(48)));
             String luxText = Float.isNaN(currentAmbientLux) ? "Lettura sensore: non disponibile" : "Lettura sensore: " + Math.round(currentAmbientLux) + " lux";""",
     "OsmAnd manager settings button",
 )
@@ -124,14 +152,18 @@ main = replace_once(
     """        NavigationRouteResult fetchNavigationRoute(Location start, double destLat, double destLon) throws Exception {
             // Ask both routing engines concurrently. The first complete, valid result wins;""",
     """        NavigationRouteResult fetchNavigationRoute(Location start, double destLat, double destLon) throws Exception {
-            if (OsmAndOfflineRouter.hasInstalledMaps(MainActivity.this)) {
+            int routingMode = MainActivity.this.getSharedPreferences("road_display", MODE_PRIVATE).getInt("routing_engine_mode", 0);
+            if (routingMode != 1 && OsmAndOfflineRouter.hasInstalledMaps(MainActivity.this)) {
                 try {
                     NavigationRouteResult offline = OsmAndOfflineRouter.calculate(MainActivity.this, start, destLat, destLon);
                     if (offline != null && offline.route.size() >= 2 && !offline.steps.isEmpty()) return offline;
+                    throw new IllegalStateException("OsmAnd non ha restituito un percorso valido");
                 } catch (Exception offlineFailure) {
-                    android.util.Log.w("RoadDisplay", "OsmAnd offline route unavailable; trying online fallback", offlineFailure);
+                    android.util.Log.w("RoadDisplay", "OsmAnd offline route unavailable", offlineFailure);
+                    if (routingMode == 2) throw new Exception("MODALITÀ OFFLINE: percorso OsmAnd non disponibile. Verifica che la mappa .obf copra partenza e destinazione.", offlineFailure);
                 }
             }
+            if (routingMode == 2) throw new Exception("MODALITÀ OFFLINE: nessuna mappa OsmAnd .obf installata o compatibile con il percorso.");
             // Ask the existing online routing engines concurrently. Valhalla remains primary;""",
     "OsmAnd offline-first route selection",
 )
