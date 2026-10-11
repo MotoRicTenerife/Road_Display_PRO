@@ -66,6 +66,7 @@ jobs:
           mkdir -p "$GITHUB_WORKSPACE/osmand-routing-libraries"
           cp OsmAnd-java/build/libs/OsmAnd-java-android-master-snapshot-android.jar "$GITHUB_WORKSPACE/osmand-routing-libraries/"
           cp OsmAnd-shared/build/outputs/aar/OsmAnd-shared-debug.aar "$GITHUB_WORKSPACE/osmand-routing-libraries/"
+          cp LICENSE "$GITHUB_WORKSPACE/osmand-routing-libraries/OsmAnd-LICENSE.txt"
           if [ -d OsmAnd-shared/build/libs ]; then
             find OsmAnd-shared/build/libs -maxdepth 1 -type f -name '*.jar' -exec cp {} "$GITHUB_WORKSPACE/osmand-routing-libraries/" \; || true
           fi
@@ -106,6 +107,13 @@ jobs:
         with:
           name: osmand-routing-libraries
           path: Road_Display_PRO/app/libs
+
+      - name: Install third-party notices in app assets
+        run: |
+          set -euo pipefail
+          mkdir -p Road_Display_PRO/app/src/main/assets/osmand
+          cp Road_Display_PRO/app/libs/OsmAnd-LICENSE.txt Road_Display_PRO/app/src/main/assets/osmand/LICENSE.txt
+          cp NEXT_NAVIPRO/THIRD_PARTY_NOTICES_OSMAND.md Road_Display_PRO/app/src/main/assets/osmand/THIRD_PARTY_NOTICES.md
 
       - name: Apply online navigation quality patch
         run: python3 NEXT_NAVIPRO/apply_online_navigation_patch.py
