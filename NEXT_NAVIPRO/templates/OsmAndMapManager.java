@@ -266,9 +266,16 @@ public final class OsmAndMapManager {
                 if (extracted == null) throw new IllegalStateException("Nessun file .obf nell'archivio");
                 File target = new File(mapsDir, extracted.getName());
                 File ready = new File(mapsDir, extracted.getName() + ".new");
+                File backup = new File(mapsDir, extracted.getName() + ".previous");
                 if (!extracted.renameTo(ready)) throw new IllegalStateException("Impossibile preparare il file");
-                if (target.exists() && !target.delete()) { ready.delete(); throw new IllegalStateException("Impossibile sostituire la mappa"); }
-                if (!ready.renameTo(target)) throw new IllegalStateException("Installazione atomica non riuscita");
+                if (backup.exists() && !backup.delete()) { ready.delete(); throw new IllegalStateException("Backup precedente non eliminabile"); }
+                boolean hadTarget = target.exists();
+                if (hadTarget && !target.renameTo(backup)) { ready.delete(); throw new IllegalStateException("Impossibile proteggere la mappa precedente"); }
+                if (!ready.renameTo(target)) {
+                    if (hadTarget) backup.renameTo(target);
+                    throw new IllegalStateException("Installazione atomica non riuscita");
+                }
+                if (backup.exists()) backup.delete();
                 MAIN.post(() -> { progress.dismiss(); success.run(); });
             } catch (Exception e) {
                 MAIN.post(() -> {
