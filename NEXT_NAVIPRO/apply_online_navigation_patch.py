@@ -80,6 +80,68 @@ if missing_dependencies:
     GRADLE.write_text(gradle, encoding="utf-8")
 
 main = MAIN.read_text(encoding="utf-8")
+
+# Add an honest, compact source badge over the shared map/HUD surface.
+# MapLibre currently renders the visible cartography online; choosing OsmAnd
+# offline routing must never make the UI falsely imply that the map renderer is offline.
+badge_code = '''
+    private void installMapSourceStatusBadge() {
+        android.widget.FrameLayout root = findViewById(android.R.id.content);
+        if (root == null) return;
+        android.view.View existing = root.findViewWithTag("road_display_map_source_badge");
+        android.widget.TextView badge;
+        if (existing instanceof android.widget.TextView) {
+            badge = (android.widget.TextView) existing;
+        } else {
+            badge = new android.widget.TextView(this);
+            badge.setTag("road_display_map_source_badge");
+            badge.setTextSize(10f);
+            badge.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+            badge.setTextColor(android.graphics.Color.WHITE);
+            badge.setPadding((int) dp(9), (int) dp(5), (int) dp(9), (int) dp(5));
+            android.graphics.drawable.GradientDrawable bg = new android.graphics.drawable.GradientDrawable();
+            bg.setColor(0xDD111111);
+            bg.setCornerRadius(dp(8));
+            bg.setStroke((int) dp(1), 0xFFFFD54F);
+            badge.setBackground(bg);
+            badge.setElevation(dp(8));
+            android.widget.FrameLayout.LayoutParams lp = new android.widget.FrameLayout.LayoutParams(
+                    android.view.ViewGroup.LayoutParams.WRAP_CONTENT, android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
+                    android.view.Gravity.TOP | android.view.Gravity.END);
+            lp.setMargins((int) dp(8), (int) dp(8), (int) dp(8), 0);
+            root.addView(badge, lp);
+        }
+        refreshMapSourceStatusBadge();
+    }
+
+    private void refreshMapSourceStatusBadge() {
+        android.widget.FrameLayout root = findViewById(android.R.id.content);
+        if (root == null) return;
+        android.view.View view = root.findViewWithTag("road_display_map_source_badge");
+        if (!(view instanceof android.widget.TextView)) return;
+        int mode = getSharedPreferences("road_display", MODE_PRIVATE).getInt("routing_engine_mode", 0);
+        String route = mode == 1 ? "NAV ONLINE" : mode == 2 ? "NAV OFFLINE" : "NAV AUTO";
+        ((android.widget.TextView) view).setText("CARTINA ONLINE · " + route);
+        ((android.widget.TextView) view).setContentDescription("Cartografia online MapLibre; modalità percorso: " + route);
+    }
+
+'''
+# Install the badge after the first content view is attached; the app's ride HUD and
+# expanded map share this activity surface, so the source label stays visible on both.
+content_match = re.search(r"\\bsetContentView\\([^;]*\\);", main)
+if not content_match:
+    raise RuntimeError("map source status badge: could not find setContentView in MainActivity")
+main = main[:content_match.end()] + "\\n        installMapSourceStatusBadge();" + main[content_match.end():]
+class_end = main.rfind("\\n}")
+if class_end < 0:
+    raise RuntimeError("map source status badge: MainActivity class end not found")
+main = main[:class_end] + "\\n" + badge_code + main[class_end:]
+main = replace_once(
+    main,
+    "routingModeButton.setText(routingModeButtonLabels[selectedMode]);",
+    "routingModeButton.setText(routingModeButtonLabels[selectedMode]);\\n                        refreshMapSourceStatusBadge();",
+    "refresh map source badge after routing mode change",
+)
 # Match the visual map rotation to the user's two-finger gesture. The map renderer
 # rotates its content by -bearing, so bearing must move opposite to the finger angle.
 main = replace_once(
