@@ -87,3 +87,15 @@ print("PASS: map manager action labels fit narrow buttons")
 print("PASS: manager is wired into the existing app through the deterministic source overlay")
 print("PASS: CI verifies the integration hooks, offline routing priority, and explicit disclaimer")
 print("LIMITATION: this test does not prove OsmAnd runtime route calculation")
+# Offline OBF data must be used as cartography too, not only as a routing database.
+renderer = (ROOT / "NEXT_NAVIPRO/templates/OsmAndOfflineMapRenderer.java").read_text(encoding="utf-8")
+for token in ("searchMapIndex", "BinaryMapDataObject", "MAPPA OSMAND OFFLINE", "OSMAND_OFFLINE", "MAX_FEATURES", "waterway", "highway"):
+    if token not in renderer:
+        raise SystemExit(f"FAIL: offline OBF renderer missing required token: {token}")
+for token in ("OFFLINE_RENDERER_TEMPLATE", "shutil.copyfile(OFFLINE_RENDERER_TEMPLATE, OFFLINE_RENDERER)", "offlineMapRenderer.draw(c, bounds, lat, lon, zoom, renderBearing, scale, density)", "Local OBF is the cartographic source; never silently fetch raster tiles.", "Cartografia vettoriale OsmAnd offline"):
+    if token not in patch:
+        raise SystemExit(f"FAIL: app build overlay does not wire offline OBF cartography: {token}")
+if "localObfCartography" not in patch or "onOfflineMapsChanged" not in patch:
+    raise SystemExit("FAIL: full-screen map or map manager does not switch to offline OBF cartography")
+print("PASS: installed OsmAnd OBF files are rendered offline across Canvas map surfaces")
+
