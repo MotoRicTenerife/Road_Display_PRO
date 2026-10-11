@@ -50,6 +50,9 @@ if "OsmAndOfflineRouter.safeMessage(offlineFailure)" not in patch:
     raise SystemExit("FAIL: OFFLINE mode hides the real OsmAnd routing failure reason")
 if "OsmAndOfflineRouter.installedMapStatus(MainActivity.this)" not in patch:
     raise SystemExit("FAIL: OFFLINE mode does not explain where the app searched for .obf files")
+for token in ("installMapSourceStatusBadge()", "refreshMapSourceStatusBadge()", "CARTINA ONLINE · ", "NAV OFFLINE", "Cartografia online MapLibre"):
+    if token not in patch:
+        raise SystemExit(f"FAIL: truthful map/routing source badge missing: {token}")
 if "class PlatformUtil" not in platform:
     raise SystemExit("FAIL: Android PlatformUtil shim is missing")
 if "python3 NEXT_NAVIPRO/test_osmand_map_manager_contract.py" not in workflow:
