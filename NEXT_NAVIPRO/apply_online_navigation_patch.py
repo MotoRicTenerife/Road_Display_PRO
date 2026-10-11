@@ -19,6 +19,10 @@ BUILD_VERSION = PROJECT / "BUILD_VERSION.txt"
 GRADLE = PROJECT / "app/build.gradle"
 MAP_MANAGER = PROJECT / "app/src/main/java/com/riccardo/roaddisplay/OsmAndMapManager.java"
 MAP_MANAGER_TEMPLATE = ROOT / "NEXT_NAVIPRO/templates/OsmAndMapManager.java"
+OSMAND_ROUTER = PROJECT / "app/src/main/java/com/riccardo/roaddisplay/OsmAndOfflineRouter.java"
+OSMAND_ROUTER_TEMPLATE = ROOT / "NEXT_NAVIPRO/templates/OsmAndOfflineRouter.java"
+PLATFORM_SHIM = PROJECT / "app/src/main/java/net/osmand/PlatformUtil.java"
+PLATFORM_SHIM_TEMPLATE = ROOT / "NEXT_NAVIPRO/templates/PlatformUtil.java"
 
 def replace_once(text: str, old: str, new: str, label: str) -> str:
     count = text.count(old)
@@ -28,10 +32,36 @@ def replace_once(text: str, old: str, new: str, label: str) -> str:
         raise RuntimeError(f"{label}: expected exactly one baseline match, got {count}")
     return text.replace(old, new, 1)
 
-if not MAP_MANAGER_TEMPLATE.is_file():
-    raise RuntimeError(f"Missing OsmAnd map manager template: {MAP_MANAGER_TEMPLATE}")
+for template in (MAP_MANAGER_TEMPLATE, OSMAND_ROUTER_TEMPLATE, PLATFORM_SHIM_TEMPLATE):
+    if not template.is_file():
+        raise RuntimeError(f"Missing required OsmAnd integration template: {template}")
 MAP_MANAGER.parent.mkdir(parents=True, exist_ok=True)
+OSMAND_ROUTER.parent.mkdir(parents=True, exist_ok=True)
+PLATFORM_SHIM.parent.mkdir(parents=True, exist_ok=True)
 shutil.copyfile(MAP_MANAGER_TEMPLATE, MAP_MANAGER)
+shutil.copyfile(OSMAND_ROUTER_TEMPLATE, OSMAND_ROUTER)
+shutil.copyfile(PLATFORM_SHIM_TEMPLATE, PLATFORM_SHIM)
+
+# Attach the OsmAnd Java engine and its runtime support libraries to the archived app build.
+gradle = GRADLE.read_text(encoding="utf-8")
+required_dependencies = [
+    "implementation fileTree(dir: 'libs', include: ['*.jar'])",
+    "implementation 'commons-logging:commons-logging:1.2'",
+    "implementation 'com.google.code.gson:gson:2.8.9'",
+    "implementation 'org.json:json:20171018'",
+    "implementation 'org.apache.commons:commons-compress:1.17'",
+    "implementation 'com.moparisthebest:junidecode:0.1.1'",
+    "implementation 'com.vividsolutions:jts-core:1.14.0'",
+    "implementation 'com.google.openlocationcode:openlocationcode:1.0.4'",
+    "implementation 'net.sf.kxml:kxml2:2.1.8'",
+]
+missing_dependencies = [dep for dep in required_dependencies if dep not in gradle]
+if missing_dependencies:
+    if "dependencies {" in gradle:
+        gradle = gradle.replace("dependencies {", "dependencies {\n    " + "\n    ".join(missing_dependencies), 1)
+    else:
+        gradle += "\n\ndependencies {\n    " + "\n    ".join(missing_dependencies) + "\n}\n"
+    GRADLE.write_text(gradle, encoding="utf-8")
 
 main = MAIN.read_text(encoding="utf-8")
 # Expose map data management in the existing display-settings dialog without
@@ -69,6 +99,25 @@ main = replace_once(
     """.setView(settingsLayout)
                 .setNegativeButton("ANNULLA", null)""",
     "OsmAnd manager settings view",
+)
+# Prefer the actual OsmAnd Java router when local .obf maps exist. If a map does not
+# cover the route or the offline engine cannot calculate it, keep the current online
+# Valhalla -> OSRM routing path as the fallback.
+main = replace_once(
+    main,
+    """        NavigationRouteResult fetchNavigationRoute(Location start, double destLat, double destLon) throws Exception {
+            // Ask both routing engines concurrently. The first complete, valid result wins;""",
+    """        NavigationRouteResult fetchNavigationRoute(Location start, double destLat, double destLon) throws Exception {
+            if (OsmAndOfflineRouter.hasInstalledMaps(MainActivity.this)) {
+                try {
+                    NavigationRouteResult offline = OsmAndOfflineRouter.calculate(MainActivity.this, start, destLat, destLon);
+                    if (offline != null && offline.route.size() >= 2 && !offline.steps.isEmpty()) return offline;
+                } catch (Exception offlineFailure) {
+                    android.util.Log.w("RoadDisplay", "OsmAnd offline route unavailable; trying online fallback", offlineFailure);
+                }
+            }
+            // Ask the existing online routing engines concurrently. Valhalla remains primary;""",
+    "OsmAnd offline-first route selection",
 )
 # Keep valid-but-moderate GNSS fixes alive longer; never treat one weak sample as an immediate outage.
 main = replace_once(
