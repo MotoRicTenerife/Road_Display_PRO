@@ -27,6 +27,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
+      - name: Checkout NEXT NAVI PRO patch files
+        uses: actions/checkout@v7
+        with:
+          path: next-navi-pro
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+
       - name: Checkout official OsmAnd source
         uses: actions/checkout@v7
         with:
@@ -97,7 +104,7 @@ jobs:
       - name: Apply NEXT NAVI PRO in-process HUD patch
         shell: bash
         run: |
-          python3 NEXT_NAVI_PRO_OSMAND/apply_next_navi_patch.py
+          python3 next-navi-pro/NEXT_NAVI_PRO_OSMAND/apply_next_navi_patch.py
 
       - name: Apply NEXT NAVI PRO app label
         working-directory: android
