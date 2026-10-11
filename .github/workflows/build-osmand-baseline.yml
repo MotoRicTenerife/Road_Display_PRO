@@ -3,6 +3,7 @@ name: NEXT NAVI PRO - build OsmAnd baseline
 on:
   push:
     branches:
+      - main
       - next-navi-pro/osmand-based-rebuild
     paths:
       - ".github/workflows/build-osmand-baseline.yml"
@@ -91,7 +92,7 @@ jobs:
         uses: actions/setup-java@v5
         with:
           distribution: temurin
-          java-version: "17"
+          java-version: "11"
           cache: gradle
           cache-dependency-path: android/**/*.gradle*
 
