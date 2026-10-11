@@ -90,9 +90,6 @@ jobs:
           cp OsmAnd-java/build/libs/OsmAnd-java-android-master-snapshot-android.jar "$GITHUB_WORKSPACE/osmand-routing-libraries/"
           cp OsmAnd-shared/build/outputs/aar/OsmAnd-shared-debug.aar "$GITHUB_WORKSPACE/osmand-routing-libraries/"
           cp LICENSE "$GITHUB_WORKSPACE/osmand-routing-libraries/OsmAnd-LICENSE.txt"
-          if [ -d OsmAnd-shared/build/libs ]; then
-            find OsmAnd-shared/build/libs -maxdepth 1 -type f -name '*.jar' -exec cp {} "$GITHUB_WORKSPACE/osmand-routing-libraries/" \; || true
-          fi
           ls -lh "$GITHUB_WORKSPACE/osmand-routing-libraries"
           test -s "$GITHUB_WORKSPACE/osmand-routing-libraries/OsmAnd-shared-debug.aar"
           test -s "$GITHUB_WORKSPACE/osmand-routing-libraries/OsmAnd-java-android-master-snapshot-android.jar"
