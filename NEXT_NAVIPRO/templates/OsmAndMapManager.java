@@ -104,10 +104,13 @@ public final class OsmAndMapManager {
         actions.setOrientation(LinearLayout.HORIZONTAL);
         Button deleteButton = new Button(context);
         deleteButton.setText("ELIMINA");
+        deleteButton.setTextSize(11f);
         Button verifyButton = new Button(context);
         verifyButton.setText("VERIFICA");
+        verifyButton.setTextSize(11f);
         Button updatesButton = new Button(context);
-        updatesButton.setText("CERCA AGGIORNAMENTI");
+        updatesButton.setText("AGGIORNA");
+        updatesButton.setTextSize(11f);
         actions.addView(deleteButton, new LinearLayout.LayoutParams(0, dp(context, 48), 1f));
         actions.addView(verifyButton, new LinearLayout.LayoutParams(0, dp(context, 48), 1f));
         actions.addView(updatesButton, new LinearLayout.LayoutParams(0, dp(context, 48), 1f));
