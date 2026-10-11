@@ -1,8 +1,10 @@
 # Implementation checklist
 
 ## Bootstrap
-- [ ] Pin official OsmAnd source revision and record it in `UPSTREAM_REVISION.md`.
-- [ ] Build upstream baseline in CI without project modifications.
+- [x] Create isolated OsmAnd-based rebuild branch.
+- [x] Add CI workflow to checkout official OsmAnd and companion repositories.
+- [ ] Obtain a successful upstream baseline build in CI.
+- [ ] Pin all upstream repository revisions from a successful build.
 - [ ] Archive build logs and exact toolchain versions.
 - [ ] Confirm debug APK installs and launches on Android 16.
 
