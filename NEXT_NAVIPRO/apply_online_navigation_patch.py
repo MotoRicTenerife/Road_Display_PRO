@@ -128,7 +128,7 @@ badge_code = '''
 '''
 # Install the badge after the first content view is attached; the app's ride HUD and
 # expanded map share this activity surface, so the source label stays visible on both.
-content_match = re.search(r"\\bsetContentView\\([^;]*\\);", main)
+content_match = re.search(r"\bsetContentView\([^;]*\);", main)
 if not content_match:
     raise RuntimeError("map source status badge: could not find setContentView in MainActivity")
 main = main[:content_match.end()] + "\n        installMapSourceStatusBadge();" + main[content_match.end():]
