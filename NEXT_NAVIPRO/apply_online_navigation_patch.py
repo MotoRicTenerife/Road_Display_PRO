@@ -55,6 +55,21 @@ required_dependencies = [
     "implementation 'com.google.openlocationcode:openlocationcode:1.0.4'",
     "implementation 'net.sf.kxml:kxml2:2.1.8'",
     "implementation 'net.sf.trove4j:trove4j:3.0.3'",
+    "implementation files('libs/OsmAnd-shared-debug.aar')",
+    "implementation 'org.jetbrains.kotlin:kotlin-stdlib:2.1.20'",
+    "implementation 'org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3'",
+    "implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.1'",
+    "implementation 'org.jetbrains.kotlinx:kotlinx-datetime:0.6.1'",
+    "implementation 'com.squareup.okio:okio:3.9.0'",
+    "implementation 'co.touchlab:stately-concurrent-collections:2.1.0'",
+    "implementation 'io.ktor:ktor-client-core:3.1.3'",
+    "implementation 'io.ktor:ktor-client-encoding:3.1.3'",
+    "implementation 'io.ktor:ktor-network:3.1.3'",
+    "implementation 'io.ktor:ktor-client-okhttp:3.1.3'",
+    "implementation 'androidx.sqlite:sqlite:2.3.1'",
+    "implementation 'androidx.sqlite:sqlite-framework:2.3.1'",
+    "implementation 'io.coil-kt.coil3:coil-core:3.1.0'",
+    "implementation 'io.coil-kt.coil3:coil-network-okhttp:3.1.0'",
 ]
 missing_dependencies = [dep for dep in required_dependencies if dep not in gradle]
 if missing_dependencies:
