@@ -232,26 +232,38 @@ jobs:
         with:
           gradle-version: '8.11.1'
 
-      - name: Enable core library desugaring for dependency transforms
+      - name: Align Java bytecode level and core library desugaring
         working-directory: Road_Display_PRO
         shell: bash
         run: |
           set -euo pipefail
-          cat >> app/build.gradle <<'EOF'
-
-          // Required for D8 global synthetics when desugaring Java records in dependencies.
-          android {
-              compileOptions {
-                  coreLibraryDesugaringEnabled true
-              }
-          }
-
-          dependencies {
-              coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.5'
-          }
-          EOF
-          echo "Core library desugaring configuration:"
-          tail -n 14 app/build.gradle
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          p = Path("app/build.gradle")
+          s = p.read_text(encoding="utf-8")
+          # OsmAnd's routing dependency includes Java records. D8 must see a
+          # Java 17 consumer configuration rather than an old Java 8 target.
+          m = re.search(r"compileOptions\\s*\\{[^}]*\\}", s, re.S)
+          if m:
+              block = m.group(0)
+              block = re.sub(r"sourceCompatibility\\s+[^\\n}]+", "sourceCompatibility JavaVersion.VERSION_17", block)
+              block = re.sub(r"targetCompatibility\\s+[^\\n}]+", "targetCompatibility JavaVersion.VERSION_17", block)
+              if "sourceCompatibility" not in block:
+                  block = block[:-1] + "\\n        sourceCompatibility JavaVersion.VERSION_17\\n    }"
+              if "targetCompatibility" not in block:
+                  block = block[:-1] + "\\n        targetCompatibility JavaVersion.VERSION_17\\n    }"
+              if "coreLibraryDesugaringEnabled" not in block:
+                  block = block[:-1] + "\\n        coreLibraryDesugaringEnabled true\\n    }"
+              s = s[:m.start()] + block + s[m.end():]
+          else:
+              s += "\\n\\nandroid { compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17; coreLibraryDesugaringEnabled true } }\\n"
+          if "com.android.tools:desugar_jdk_libs:2.1.5" not in s:
+              s += "\\ndependencies { coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.5' }\\n"
+          p.write_text(s, encoding="utf-8")
+          print("Effective Java/desugaring config:")
+          print("\\n".join(x for x in s.splitlines() if "sourceCompatibility" in x or "targetCompatibility" in x or "coreLibraryDesugaring" in x))
+          PY
       - name: Build APK
         working-directory: Road_Display_PRO
         run: gradle assembleDebug --stacktrace
