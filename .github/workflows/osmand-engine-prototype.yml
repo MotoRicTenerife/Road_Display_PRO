@@ -40,7 +40,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: osmandapp/OsmAnd-resources
-          ref: master
+          ref: b981dac242961d9de6135b1b0ff82cabd8f55a7d
           path: upstream/resources
           fetch-depth: 1
 
