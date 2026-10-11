@@ -38,7 +38,7 @@ if "OsmAndMapManager.show(MainActivity.this)" not in patch:
     raise SystemExit("FAIL: existing display settings do not expose the map manager")
 if 'OsmAndOfflineRouter.calculate(MainActivity.this, start, destLat, destLon)' not in patch:
     raise SystemExit("FAIL: existing route selection does not prefer OsmAnd offline routing")
-for token in ('AUTOMATICO · OsmAnd offline prioritario', 'ONLINE · Valhalla / OSRM', 'OFFLINE · solo OsmAnd', 'routing_engine_mode'):
+for token in ('AUTOMATICO · OsmAnd, poi online', 'ONLINE · Valhalla / OSRM', 'OFFLINE · solo OsmAnd', 'routing_engine_mode'):
     if token not in patch:
         raise SystemExit(f"FAIL: missing routing mode control/policy: {token}")
 if "OSMAND_OFFLINE" not in router or "new BinaryMapIndexReader" not in router:
@@ -69,6 +69,11 @@ for token in ("parseCatalog(rawCatalog.toString())", "rowPattern", "cellPattern"
 
 print("PASS: official OsmAnd catalog/download contract present")
 print("PASS: catalog parser accepts HTML, Markdown, and legacy pipe-delimited rows")
+for token in ('deleteButton.setTextSize(11f)', 'verifyButton.setTextSize(11f)',
+              'updatesButton.setText("AGGIORNA")', 'updatesButton.setTextSize(11f)'):
+    if token not in template:
+        raise SystemExit(f"FAIL: compact map-manager action label missing: {token}")
+print("PASS: map manager action labels fit narrow buttons")
 print("PASS: manager is wired into the existing app through the deterministic source overlay")
 print("PASS: CI verifies the integration hooks, offline routing priority, and explicit disclaimer")
 print("LIMITATION: this test does not prove OsmAnd runtime route calculation")
