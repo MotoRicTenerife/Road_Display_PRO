@@ -202,6 +202,26 @@ jobs:
             echo "::endgroup::"
           done
 
+      - name: Stamp unique integration build version
+        working-directory: Road_Display_PRO
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          gradle = Path("app/build.gradle")
+          source = gradle.read_text(encoding="utf-8")
+          code = re.search(r"\\bversionCode\\s+(\\d+)", source)
+          if not code:
+              raise SystemExit("Could not locate versionCode in app/build.gradle")
+          source = source[:code.start()] + "versionCode " + str(int(code.group(1)) + 1) + source[code.end():]
+          source, count = re.subn(r"versionName\\s+['\\"]3\\.46\\.0['\\"]", "versionName '3.46.1'", source, count=1)
+          if count != 1:
+              raise SystemExit("Could not stamp versionName 3.46.1")
+          gradle.write_text(source, encoding="utf-8")
+          Path("BUILD_VERSION.txt").write_text("3.46.1\\n", encoding="utf-8")
+          print("Stamped integration build: versionName 3.46.1; versionCode incremented")
+          PY
+
       - name: Publish navigation source snapshot for integration review
         working-directory: Road_Display_PRO
         run: |
@@ -291,5 +311,5 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: next-navi-pro-speed-limits-3.46.0-debug
+          name: NEXT-NAVI-PRO-3.46.1-OFFLINE-MAPS-debug
           path: Road_Display_PRO/app/build/outputs/apk/debug/app-debug.apk
