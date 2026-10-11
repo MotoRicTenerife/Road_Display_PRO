@@ -1,0 +1,115 @@
+name: NEXT NAVI PRO - build OsmAnd baseline
+
+on:
+  push:
+    branches:
+      - next-navi-pro/osmand-based-rebuild
+    paths:
+      - ".github/workflows/build-osmand-baseline.yml"
+      - "NEXT_NAVI_PRO_OSMAND/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: osmand-baseline-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-upstream-baseline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout official OsmAnd source
+        uses: actions/checkout@v7
+        with:
+          repository: osmandapp/OsmAnd
+          path: android
+          fetch-depth: 1
+
+      - name: Checkout OsmAnd resources
+        uses: actions/checkout@v7
+        with:
+          repository: osmandapp/OsmAnd-resources
+          path: resources
+          fetch-depth: 1
+
+      - name: Checkout OsmAnd core
+        uses: actions/checkout@v7
+        with:
+          repository: osmandapp/OsmAnd-core
+          path: core
+          fetch-depth: 1
+
+      - name: Checkout OsmAnd core legacy
+        uses: actions/checkout@v7
+        with:
+          repository: osmandapp/OsmAnd-core-legacy
+          path: core-legacy
+          fetch-depth: 1
+
+      - name: Checkout OsmAnd build scripts
+        uses: actions/checkout@v7
+        with:
+          repository: osmandapp/OsmAnd-build
+          path: build
+          fetch-depth: 1
+
+      - name: Checkout OsmAnd tools
+        uses: actions/checkout@v7
+        with:
+          repository: osmandapp/OsmAnd-tools
+          path: tools
+          fetch-depth: 1
+
+      - name: Checkout OsmAnd misc resources
+        uses: actions/checkout@v7
+        with:
+          repository: osmandapp/OsmAnd-misc
+          path: misc
+          fetch-depth: 1
+
+      - name: Record upstream revisions
+        shell: bash
+        run: |
+          {
+            echo "Build date (UTC): $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+            for dir in android resources core core-legacy build tools misc; do
+              echo "$dir: $(git -C "$dir" rev-parse HEAD)"
+            done
+          } | tee upstream-revisions.txt
+
+      - name: Set up JDK
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+          cache-dependency-path: android/**/*.gradle*
+
+      - name: Prepare Gradle
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          printf '\norg.gradle.jvmargs=-Xmx3g -XX:+HeapDumpOnOutOfMemoryError -Dfile.encoding=UTF-8\n' >> gradle.properties
+
+      - name: Build official OsmAnd debug APK
+        working-directory: android
+        run: ./gradlew --no-daemon --stacktrace assembleNightlyFreeLegacyFatDebug
+
+      - name: Verify APK exists
+        shell: bash
+        run: |
+          find android/OsmAnd/build/outputs/apk -type f -name '*.apk' -print
+          test -n "$(find android/OsmAnd/build/outputs/apk -type f -name '*.apk' -print -quit)"
+
+      - name: Upload debug APK and build provenance
+        uses: actions/upload-artifact@v6
+        with:
+          name: next-navi-pro-osmand-baseline-${{ github.run_number }}
+          path: |
+            android/OsmAnd/build/outputs/apk/**/*.apk
+            upstream-revisions.txt
+          if-no-files-found: error
+          retention-days: 30
