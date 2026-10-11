@@ -103,6 +103,11 @@ main = replace_once(
             android.widget.Button osmAndMaps = new android.widget.Button(MainActivity.this);
             osmAndMaps.setText("MAPPE OSMAND · SCARICA / GESTISCI");
             osmAndMaps.setAllCaps(false);
+            osmAndMaps.setTextSize(11f);
+            osmAndMaps.setMaxLines(2);
+            osmAndMaps.setEllipsize(android.text.TextUtils.TruncateAt.END);
+            osmAndMaps.setGravity(android.view.Gravity.CENTER);
+            osmAndMaps.setPadding((int)dp(6), 0, (int)dp(6), 0);
             osmAndMaps.setOnClickListener(v -> OsmAndMapManager.show(MainActivity.this));
             settingsLayout.addView(osmAndMaps, new LinearLayout.LayoutParams(-1, (int)dp(48)));
             android.content.SharedPreferences routingPrefs = getSharedPreferences("road_display", MODE_PRIVATE);
@@ -111,6 +116,12 @@ main = replace_once(
             String[] routingModeLabels = {"AUTOMATICO · OsmAnd offline prioritario", "ONLINE · Valhalla / OSRM", "OFFLINE · solo OsmAnd"};
             routingModeButton.setText("MOTORE NAVIGAZIONE · " + routingModeLabels[savedRoutingMode]);
             routingModeButton.setAllCaps(false);
+            // Long routing labels must remain readable inside the settings button on narrow screens.
+            routingModeButton.setTextSize(10f);
+            routingModeButton.setMaxLines(2);
+            routingModeButton.setEllipsize(android.text.TextUtils.TruncateAt.END);
+            routingModeButton.setGravity(android.view.Gravity.CENTER);
+            routingModeButton.setPadding((int)dp(6), 0, (int)dp(6), 0);
             routingModeButton.setOnClickListener(v -> {
                 android.widget.RadioGroup routingModes = new android.widget.RadioGroup(MainActivity.this);
                 routingModes.setOrientation(android.widget.RadioGroup.VERTICAL);
@@ -119,7 +130,10 @@ main = replace_once(
                     android.widget.RadioButton option = new android.widget.RadioButton(MainActivity.this);
                     option.setId(200 + i);
                     option.setText(routingModeLabels[i]);
-                    routingModes.addView(option, new android.widget.RadioGroup.LayoutParams(-1, (int)dp(48)));
+                    option.setTextSize(13f);
+                    option.setMaxLines(2);
+                    option.setPadding((int)dp(8), 0, (int)dp(8), 0);
+                    routingModes.addView(option, new android.widget.RadioGroup.LayoutParams(-1, (int)dp(52)));
                 }
                 routingModes.check(200 + Math.max(0, Math.min(2, routingPrefs.getInt("routing_engine_mode", 0))));
                 new AlertDialog.Builder(MainActivity.this).setTitle("MOTORE DI NAVIGAZIONE")
