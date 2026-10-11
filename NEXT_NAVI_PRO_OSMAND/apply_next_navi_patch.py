@@ -50,8 +50,11 @@ import android.widget.TextView;
 import net.osmand.Location;
 import net.osmand.plus.OsmandApplication;
 import net.osmand.plus.R;
+import net.osmand.binary.RouteDataObject;
 import net.osmand.plus.routing.NextDirectionInfo;
 import net.osmand.plus.routing.RoutingHelper;
+import net.osmand.plus.utils.FormattedValue;
+import net.osmand.plus.utils.OsmAndFormatter;
 
 import java.util.Locale;
 
@@ -73,6 +76,7 @@ final class NextNaviProOverlay {
     private Button returnButton;
     private TextView speedValue;
     private TextView gpsValue;
+    private TextView speedLimitValue;
     private TextView maneuverValue;
     private TextView distanceValue;
     private boolean disposed;
@@ -150,6 +154,14 @@ final class NextNaviProOverlay {
         gpsValue.setGravity(Gravity.CENTER);
         bottom.addView(gpsValue, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
+        LinearLayout limitColumn = new LinearLayout(activity);
+        limitColumn.setOrientation(LinearLayout.VERTICAL);
+        limitColumn.setGravity(Gravity.CENTER);
+        limitColumn.addView(text("LIMITE OSMAND", 10, WHITE, Typeface.BOLD), wrapWrap());
+        speedLimitValue = text("--", 24, YELLOW, Typeface.BOLD);
+        limitColumn.addView(speedLimitValue, wrapWrap());
+        bottom.addView(limitColumn, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+
         Button menu = new Button(activity);
         menu.setText("MENU\nOSMAND");
         menu.setAllCaps(false);
@@ -208,7 +220,7 @@ final class NextNaviProOverlay {
     }
 
     private void updateFromOsmAnd() {
-        if (speedValue == null || maneuverValue == null || distanceValue == null || gpsValue == null) {
+        if (speedValue == null || maneuverValue == null || distanceValue == null || gpsValue == null || speedLimitValue == null) {
             return;
         }
         Location location = app.getLocationProvider().getLastKnownLocation();
@@ -228,6 +240,7 @@ final class NextNaviProOverlay {
         }
 
         RoutingHelper routing = app.getRoutingHelper();
+        updateSpeedLimitFromOsmAnd(routing);
         if (routing.isRouteBeingCalculated()) {
             maneuverValue.setText("Calcolo percorso…");
             distanceValue.setText("--");
@@ -249,6 +262,33 @@ final class NextNaviProOverlay {
         String instruction = info.directionInfo.getDescriptionRoutePart(activity, true);
         maneuverValue.setText(TextUtils.isEmpty(instruction) ? "Prossima manovra" : instruction);
         distanceValue.setText(formatDistance(info.distanceTo));
+    }
+
+    /**
+     * Mirrors OsmAnd's own MaxSpeedWidget data path. No external speed-limit source is used.
+     */
+    private void updateSpeedLimitFromOsmAnd(RoutingHelper routing) {
+        float maxSpeed = 0;
+        boolean linkedToLocation = app.getMapViewTrackingUtilities().isMapLinkedToLocation();
+        if ((!routing.isFollowingMode()
+                || routing.isDeviatedFromRoute()
+                || (routing.getCurrentGPXRoute() != null && !routing.isCurrentGPXRouteV2()))
+                && linkedToLocation) {
+            RouteDataObject road = app.getLocationProvider().getLastKnownRouteSegment();
+            Location location = app.getLocationProvider().getLastKnownLocation();
+            if (road != null && location != null) {
+                boolean direction = road.bearingVsRouteDirection(location);
+                maxSpeed = road.getMaximumSpeed(direction, app.getSettings().getApplicationMode().getRouteTypeProfile());
+            }
+        } else if (routing.isFollowingMode()) {
+            maxSpeed = routing.getCurrentMaxSpeed();
+        }
+        if (maxSpeed <= 0 || maxSpeed == RouteDataObject.NONE_MAX_SPEED) {
+            speedLimitValue.setText("--");
+            return;
+        }
+        FormattedValue formatted = OsmAndFormatter.getFormattedSpeedValue(maxSpeed, app);
+        speedLimitValue.setText(formatted.value + (TextUtils.isEmpty(formatted.unit) ? "" : " " + formatted.unit));
     }
 
     private String formatDistance(int meters) {
