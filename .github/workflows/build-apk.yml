@@ -78,6 +78,7 @@ jobs:
 
   build:
     needs: osmand-routing-libraries
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository
