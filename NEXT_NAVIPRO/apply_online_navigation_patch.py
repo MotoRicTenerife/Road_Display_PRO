@@ -85,13 +85,13 @@ main = MAIN.read_text(encoding="utf-8")
 main = replace_once(
     main,
     "mapFrozenBearing=normalizeBearing(rotateStartBearing+delta); // Match the finger gesture direction; minus delta inverted rotation.",
-    "mapFrozenBearing=normalizeBearing(rotateStartBearing-delta); // Keep map content rotating with the two-finger gesture.",
+    "mapFrozenBearing=normalizeBearing(rotateStartBearing+delta); // Follow the user's two-finger rotation direction.",
     "full-screen map rotation direction",
 )
 main = replace_once(
     main,
     "tripMapBearing=normalizeBearing(tripRotateStartBearing+delta); // Keep trip-map rotation consistent with the main map.",
-    "tripMapBearing=normalizeBearing(tripRotateStartBearing-delta); // Keep trip-map rotation consistent with the main map.",
+    "tripMapBearing=normalizeBearing(tripRotateStartBearing+delta); // Follow the same gesture direction as the full-screen map.",
     "trip-map rotation direction",
 )
 # The full-screen map is a native MapLibre MapView layered above the Canvas. Its
@@ -129,7 +129,7 @@ main = replace_once(
                         float angle=(float)Math.toDegrees(Math.atan2(dy,dx));
                         float delta=angle-vectorRotateStartAngle;
                         while(delta>180f)delta-=360f; while(delta<-180f)delta+=360f;
-                        mapFrozenBearing=normalizeBearing(vectorRotateStartBearing-delta);
+                        mapFrozenBearing=normalizeBearing(vectorRotateStartBearing+delta);
                         mapUserPanned=true; movedMap=true;
                         // Change only the bearing: preserve MapLibre's live target and zoom
                         // so rotation never snaps the map back during a simultaneous pinch.
@@ -167,11 +167,11 @@ main = replace_once(
             String luxText = Float.isNaN(currentAmbientLux) ? "Lettura sensore: non disponibile" : "Lettura sensore: " + Math.round(currentAmbientLux) + " lux";""",
     """            group.check(100 + Math.max(0, Math.min(2, displayThemeMode)));
             android.widget.Button osmAndMaps = new android.widget.Button(MainActivity.this);
-            osmAndMaps.setText("MAPPE OSMAND · SCARICA / GESTISCI");
+            osmAndMaps.setText("MAPPE OFFLINE OSMAND");
             osmAndMaps.setAllCaps(false);
-            osmAndMaps.setTextSize(11f);
-            osmAndMaps.setMaxLines(2);
-            osmAndMaps.setEllipsize(android.text.TextUtils.TruncateAt.END);
+            osmAndMaps.setTextSize(12f);
+            osmAndMaps.setMaxLines(1);
+            osmAndMaps.setSingleLine(true);
             osmAndMaps.setGravity(android.view.Gravity.CENTER);
             osmAndMaps.setPadding((int)dp(6), 0, (int)dp(6), 0);
             osmAndMaps.setOnClickListener(v -> OsmAndMapManager.show(MainActivity.this));
@@ -179,13 +179,13 @@ main = replace_once(
             android.content.SharedPreferences routingPrefs = getSharedPreferences("road_display", MODE_PRIVATE);
             android.widget.Button routingModeButton = new android.widget.Button(MainActivity.this);
             int savedRoutingMode = Math.max(0, Math.min(2, routingPrefs.getInt("routing_engine_mode", 0)));
-            String[] routingModeLabels = {"AUTO · offline, poi online", "ONLINE · Valhalla / OSRM", "OFFLINE · solo OsmAnd"};
-            routingModeButton.setText("NAVIGAZIONE · " + routingModeLabels[savedRoutingMode]);
+            String[] routingModeLabels = {"AUTOMATICO · OsmAnd, poi online", "ONLINE · Valhalla / OSRM", "OFFLINE · solo OsmAnd"};
+            String[] routingModeButtonLabels = {"NAV: AUTO", "NAV: ONLINE", "NAV: OFFLINE"};
+            routingModeButton.setText(routingModeButtonLabels[savedRoutingMode]);
             routingModeButton.setAllCaps(false);
             // Long routing labels must remain readable inside the settings button on narrow screens.
-            routingModeButton.setTextSize(10f);
-            routingModeButton.setMaxLines(2);
-            routingModeButton.setEllipsize(android.text.TextUtils.TruncateAt.END);
+            routingModeButton.setTextSize(12f);
+            routingModeButton.setSingleLine(true);
             routingModeButton.setGravity(android.view.Gravity.CENTER);
             routingModeButton.setPadding((int)dp(6), 0, (int)dp(6), 0);
             routingModeButton.setOnClickListener(v -> {
@@ -209,7 +209,7 @@ main = replace_once(
                         int selectedMode = routingModes.getCheckedRadioButtonId() - 200;
                         if (selectedMode < 0 || selectedMode > 2) selectedMode = 0;
                         routingPrefs.edit().putInt("routing_engine_mode", selectedMode).apply();
-                        routingModeButton.setText("NAVIGAZIONE · " + routingModeLabels[selectedMode]);
+                        routingModeButton.setText(routingModeButtonLabels[selectedMode]);
                     }).show();
             });
             settingsLayout.addView(routingModeButton, new LinearLayout.LayoutParams(-1, (int)dp(48)));
@@ -732,19 +732,19 @@ ROOT = Path(__file__).resolve().parents[1]
 MAIN = (ROOT / "app/src/main/java/com/riccardo/roaddisplay/MainActivity.java").read_text(encoding="utf-8")
 assert "map.getUiSettings().setRotateGesturesEnabled(false);" in MAIN
 assert "vectorRotating=true; movedMap=true;" in MAIN
-assert "mapFrozenBearing=normalizeBearing(vectorRotateStartBearing-delta);" in MAIN
+assert "mapFrozenBearing=normalizeBearing(vectorRotateStartBearing+delta);" in MAIN
 assert "CameraPosition currentCamera = vectorMap.getCameraPosition();" in MAIN
 assert ".target(currentCamera.target).zoom(currentCamera.zoom)" in MAIN
-assert "mapFrozenBearing=normalizeBearing(rotateStartBearing-delta);" in MAIN
-assert "tripMapBearing=normalizeBearing(tripRotateStartBearing-delta);" in MAIN
-assert "mapFrozenBearing=normalizeBearing(rotateStartBearing+delta);" not in MAIN
-assert "tripMapBearing=normalizeBearing(tripRotateStartBearing+delta);" not in MAIN
+assert "mapFrozenBearing=normalizeBearing(rotateStartBearing+delta);" in MAIN
+assert "tripMapBearing=normalizeBearing(tripRotateStartBearing+delta);" in MAIN
+assert "mapFrozenBearing=normalizeBearing(rotateStartBearing-delta);" not in MAIN
+assert "tripMapBearing=normalizeBearing(tripRotateStartBearing-delta);" not in MAIN
 # UI regression: long labels wrap to two lines, shrink, and ellipsize instead of overflowing.
-assert "routingModeButton.setMaxLines(2);" in MAIN
-assert "routingModeButton.setTextSize(10f);" in MAIN
-assert "routingModeButton.setEllipsize(android.text.TextUtils.TruncateAt.END);" in MAIN
-assert "osmAndMaps.setMaxLines(2);" in MAIN
-assert "osmAndMaps.setEllipsize(android.text.TextUtils.TruncateAt.END);" in MAIN
+assert 'String[] routingModeButtonLabels = {"NAV: AUTO", "NAV: ONLINE", "NAV: OFFLINE"};' in MAIN
+assert "routingModeButton.setSingleLine(true);" in MAIN
+assert "routingModeButton.setTextSize(12f);" in MAIN
+assert 'osmAndMaps.setText("MAPPE OFFLINE OSMAND");' in MAIN
+assert "osmAndMaps.setSingleLine(true);" in MAIN
 print("MAP ROTATION GESTURE REGRESSION: PASS")
 print("SETTINGS BUTTON LABEL FIT REGRESSION: PASS")
 ''', encoding="utf-8")
