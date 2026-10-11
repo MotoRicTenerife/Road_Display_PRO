@@ -251,7 +251,7 @@ public final class OsmAndMapManager {
                 try (BufferedReader reader = new BufferedReader(new InputStreamReader(
                         new BufferedInputStream(c.getInputStream()), StandardCharsets.UTF_8))) {
                     String line;
-                    while ((line = reader.readLine()) != null) rawCatalog.append(line).append('\\n');
+                    while ((line = reader.readLine()) != null) rawCatalog.append(line).append('\n');
                 }
                 ArrayList<MapItem> found = parseCatalog(rawCatalog.toString());
                 if (found.isEmpty()) throw new IllegalStateException(
