@@ -49,6 +49,8 @@ if "python3 NEXT_NAVIPRO/test_osmand_map_manager_contract.py" not in workflow:
     raise SystemExit("FAIL: CI does not run the map manager contract test")
 if "osmand-routing-libraries" not in workflow or "OsmAnd-java:androidJar" not in workflow:
     raise SystemExit("FAIL: CI does not build/package the pinned OsmAnd routing libraries")
+if "OsmAndOfflineSmokeTest" not in workflow or "Spain_canarias_europe_2.obf" not in workflow:
+    raise SystemExit("FAIL: CI does not test a real offline route against the Canary Islands OBF map")
 
 # The app must be honest: downloading .obf files is not itself proof of offline routing.
 if "does not claim offline navigation" not in template_lower and "routing offline non attivo" not in template_lower:
