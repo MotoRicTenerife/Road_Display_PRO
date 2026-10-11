@@ -204,7 +204,7 @@ final class OsmAndOfflineRouter {
         double a=Math.sin(dp/2)*Math.sin(dp/2)+Math.cos(p1)*Math.cos(p2)*Math.sin(dl/2)*Math.sin(dl/2);
         return 6371000.0*2.0*Math.atan2(Math.sqrt(a),Math.sqrt(Math.max(0.0,1.0-a)));
     }
-    private static String safeMessage(Exception e) {
+    static String safeMessage(Exception e) {
         String s=e.getMessage();
         return s == null || s.trim().isEmpty() ? e.getClass().getSimpleName() : s;
     }
