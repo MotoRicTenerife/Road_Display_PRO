@@ -199,8 +199,7 @@ final class OsmAndOfflineMapRenderer {
         return movedX > Math.max(90.0, bounds.width() * 0.35 / Math.max(0.5f, scale) * 156543.0 / (1 << zoom))
                 || movedY > Math.max(90.0, bounds.height() * 0.35 / Math.max(0.5f, scale) * 156543.0 / (1 << zoom))
                 || Math.abs(bounds.width() - requestedWidth) > 80f
-                || Math.abs(bounds.height() - requestedHeight) > 80f
-                || Math.abs(bearingDelta(requestedBearing, 0f)) > 999f;
+                || Math.abs(bounds.height() - requestedHeight) > 80f;
     }
 
     private void requestViewport(File[] maps, long signature, double lat, double lon, int zoom,
