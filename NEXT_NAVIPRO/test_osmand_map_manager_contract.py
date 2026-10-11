@@ -61,7 +61,14 @@ for token in ("ELIMINA", "VERIFICA", "CERCA AGGIORNAMENTI", "AGGIORNAMENTO DISPO
 if "does not claim offline navigation" not in template_lower and "il motore osmand deve calcolare un percorso reale" not in template_lower:
     raise SystemExit("FAIL: missing explicit guard against claiming unimplemented offline routing")
 
+# Regression guard for the live catalog's HTML/Markdown table format changes.
+for token in ("parseCatalog(rawCatalog.toString())", "rowPattern", "cellPattern",
+              "tablePattern", "cleanCatalogCell", "HTML/Markdown"):
+    if token not in template:
+        raise SystemExit(f"FAIL: catalog parser lacks format-compatibility handling: {token}")
+
 print("PASS: official OsmAnd catalog/download contract present")
+print("PASS: catalog parser accepts HTML, Markdown, and legacy pipe-delimited rows")
 print("PASS: manager is wired into the existing app through the deterministic source overlay")
 print("PASS: CI verifies the integration hooks, offline routing priority, and explicit disclaimer")
 print("LIMITATION: this test does not prove OsmAnd runtime route calculation")
