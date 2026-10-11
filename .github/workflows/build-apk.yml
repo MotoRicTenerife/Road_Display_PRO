@@ -232,9 +232,29 @@ jobs:
         with:
           gradle-version: '8.11.1'
 
+      - name: Enable core library desugaring for dependency transforms
+        working-directory: Road_Display_PRO
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat >> app/build.gradle <<'EOF'
+
+          // Required for D8 global synthetics when desugaring Java records in dependencies.
+          android {
+              compileOptions {
+                  coreLibraryDesugaringEnabled true
+              }
+          }
+
+          dependencies {
+              coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.5'
+          }
+          EOF
+          echo "Core library desugaring configuration:"
+          tail -n 14 app/build.gradle
       - name: Build APK
         working-directory: Road_Display_PRO
-        run: gradle assembleDebug
+        run: gradle assembleDebug --stacktrace
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
