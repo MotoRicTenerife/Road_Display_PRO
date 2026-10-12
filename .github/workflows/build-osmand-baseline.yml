@@ -1,4 +1,4 @@
-name: NEXT NAVI PRO - build OsmAnd baseline
+name: NEXT NAVI PRO - rebuild after Java compile fix
 
 on:
   push:
