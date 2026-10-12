@@ -167,6 +167,20 @@ final class NextNaviProOverlay extends View {
 
     private void drawArrow(Canvas c, float x, float y, float s, String label) {
         String a = label == null ? "" : label.toLowerCase(Locale.ROOT);
+        if (a.contains("roundabout") || a.contains("rotary") || a.contains("rotonda")) {
+            p.setStyle(Paint.Style.STROKE);
+            p.setStrokeWidth(Math.max(dp(4), s * .12f));
+            p.setColor(YELLOW);
+            c.drawCircle(x, y, s * .30f, p);
+            p.setStyle(Paint.Style.FILL);
+            Path head = new Path();
+            head.moveTo(x + s * .39f, y - s * .05f);
+            head.lineTo(x + s * .10f, y - s * .12f);
+            head.lineTo(x + s * .27f, y - s * .35f);
+            head.close();
+            c.drawPath(head, p);
+            return;
+        }
         Path path = new Path();
         if (a.contains("left") || a.contains("sinistra")) {
             path.moveTo(x-s*.42f,y-s*.02f); path.lineTo(x-s*.04f,y-s*.02f);
