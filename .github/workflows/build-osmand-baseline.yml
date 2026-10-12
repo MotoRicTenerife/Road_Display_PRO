@@ -34,6 +34,28 @@ jobs:
           ref: ${{ github.sha }}
           fetch-depth: 1
 
+      - name: Extract original NEXT NAVI PRO app source for faithful UI port
+        working-directory: next-navi-pro
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/next-navi-original
+          unzip -q Road_Display_PRO_3.0.0.zip -d /tmp/next-navi-original
+          test -f /tmp/next-navi-original/Road_Display_PRO/app/src/main/java/com/riccardo/roaddisplay/MainActivity.java
+          mkdir -p original-ui-reference
+          cp -a /tmp/next-navi-original/Road_Display_PRO/app original-ui-reference/
+          cp -a /tmp/next-navi-original/Road_Display_PRO/roadtools original-ui-reference/
+          cp /tmp/next-navi-original/Road_Display_PRO/README.md original-ui-reference/README_ORIGINAL.md
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add original-ui-reference
+          if ! git diff --cached --quiet; then
+            git commit -m "Recover original NEXT NAVI PRO UI source for OsmAnd port"
+            git push origin "HEAD:${GITHUB_REF#refs/heads/}"
+          else
+            echo "Original UI reference source already extracted."
+          fi
+
       - name: Checkout official OsmAnd source
         uses: actions/checkout@v7
         with:
