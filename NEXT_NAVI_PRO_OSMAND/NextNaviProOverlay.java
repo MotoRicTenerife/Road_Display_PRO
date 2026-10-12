@@ -24,6 +24,11 @@ import net.osmand.plus.utils.OsmAndFormatter;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Locale;
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import org.json.JSONObject;
 
 /** Original NEXT NAVI PRO rider-glance composition, backed by OsmAnd's live state. */
 final class NextNaviProOverlay extends View {
@@ -40,6 +45,10 @@ final class NextNaviProOverlay extends View {
     private boolean nativeMode, disposed;
     private int speed = -1;
     private String gps = "GPS IN ATTESA", limit = "", instruction = "NAVIGAZIONE NON ATTIVA", distance = "—";
+    private volatile String weather = "METEO NON DISPONIBILE";
+    private volatile boolean weatherPending;
+    private long lastWeatherFetch;
+    private double lastWeatherLat = Double.NaN, lastWeatherLon = Double.NaN;
 
     NextNaviProOverlay(MapActivity activity, OsmandApplication app) {
         super(activity);
@@ -79,6 +88,7 @@ final class NextNaviProOverlay extends View {
                 ? Math.max(0, Math.round(l.getSpeed() * 3.6f)) : -1;
         gps = l == null ? "GPS IN ATTESA" : l.hasAccuracy()
                 ? String.format(Locale.getDefault(), "GPS ±%.0f m", l.getAccuracy()) : "GPS ATTIVO";
+        if (l != null && (!l.hasAccuracy() || l.getAccuracy() <= 50f)) requestWeather(l);
         RoutingHelper r = app.getRoutingHelper();
         updateLimit(r, l);
         if (r.isRouteBeingCalculated()) {
@@ -96,6 +106,61 @@ final class NextNaviProOverlay extends View {
         instruction = d == null || d.trim().isEmpty() ? "PROSSIMA MANOVRA" : d.trim();
         distance = info.distanceTo < 1000 ? info.distanceTo + " m"
                 : String.format(Locale.getDefault(), "%.1f km", info.distanceTo / 1000f);
+    }
+
+    private void requestWeather(final Location l) {
+        long now = System.currentTimeMillis();
+        boolean moved = Double.isNaN(lastWeatherLat)
+                || distanceMeters(lastWeatherLat, lastWeatherLon, l.getLatitude(), l.getLongitude()) >= 10000.0;
+        if (weatherPending || (now - lastWeatherFetch < 15L * 60L * 1000L && !moved)) return;
+        weatherPending = true;
+        lastWeatherFetch = now;
+        lastWeatherLat = l.getLatitude();
+        lastWeatherLon = l.getLongitude();
+        new Thread(() -> {
+            HttpURLConnection connection = null;
+            try {
+                String url = "https://api.open-meteo.com/v1/forecast?latitude=" + l.getLatitude()
+                        + "&longitude=" + l.getLongitude()
+                        + "&current=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,weather_code,wind_speed_10m,wind_gusts_10m&timezone=auto";
+                connection = (HttpURLConnection) new URL(url).openConnection();
+                connection.setConnectTimeout(5000);
+                connection.setReadTimeout(5000);
+                connection.setRequestMethod("GET");
+                StringBuilder body = new StringBuilder();
+                try (BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream()))) {
+                    String line;
+                    while ((line = reader.readLine()) != null) body.append(line);
+                }
+                JSONObject root = new JSONObject(body.toString()).optJSONObject("current");
+                if (root != null) {
+                    double temp = root.optDouble("temperature_2m", Double.NaN);
+                    double wind = root.optDouble("wind_speed_10m", Double.NaN);
+                    int code = root.optInt("weather_code", -1);
+                    String label = code == 0 ? "SERENO" : code <= 3 ? "NUVOLOSO"
+                            : (code == 45 || code == 48) ? "NEBBIA"
+                            : (code >= 51 && code <= 67) || (code >= 80 && code <= 82) ? "PIOGGIA"
+                            : (code >= 71 && code <= 77) || code >= 85 ? "NEVE"
+                            : (code >= 95) ? "TEMPORALE" : "METEO";
+                    final String result = label + " · " + (Double.isNaN(temp) ? "—" : Math.round(temp) + "°C")
+                            + " · vento " + (Double.isNaN(wind) ? "—" : Math.round(wind) + " km/h");
+                    post(() -> { weather = result; invalidate(); });
+                }
+            } catch (Exception ignored) {
+                post(() -> { if (weather == null || weather.isEmpty()) weather = "METEO NON DISPONIBILE"; invalidate(); });
+            } finally {
+                if (connection != null) connection.disconnect();
+                weatherPending = false;
+            }
+        }, "next-navi-weather").start();
+    }
+
+    private static double distanceMeters(double lat1, double lon1, double lat2, double lon2) {
+        double a = Math.toRadians(lat2 - lat1), b = Math.toRadians(lon2 - lon1);
+        double x = Math.sin(a / 2) * Math.sin(a / 2)
+                + Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2))
+                * Math.sin(b / 2) * Math.sin(b / 2);
+        return 6371000.0 * 2.0 * Math.atan2(Math.sqrt(x), Math.sqrt(Math.max(0.0, 1.0 - x)));
     }
 
     private void updateLimit(RoutingHelper r, Location l) {
@@ -119,7 +184,7 @@ final class NextNaviProOverlay extends View {
         int w = getWidth(), h = getHeight();
         if (w <= 0 || h <= 0) return;
         boolean land = w > h;
-        float top = dp(land ? 38 : 50);
+        float top = dp(land ? 48 : 66);
         if (nativeMode) {
             restoreMapSize();
             back.set(w - dp(184), dp(8), w - dp(8), dp(54));
@@ -137,8 +202,9 @@ final class NextNaviProOverlay extends View {
         c.drawColor(BLACK);
         c.restoreToCount(save);
         panel(c, new RectF(0, 0, w, top), 0xFF111820, 0);
-        text(c, gps, land ? w * .43f : w * .5f, top * .64f, 12, gps.contains("DEBOLE") ? 0xFFFFB84D : GREEN, Paint.Align.CENTER);
-        text(c, clock(), w - dp(126), top * .64f, 13, WHITE, Paint.Align.CENTER);
+        text(c, gps, land ? w * .36f : w * .5f, top * (land ? .48f : .38f), 12, gps.contains("DEBOLE") ? 0xFFFFB84D : GREEN, Paint.Align.CENTER);
+        text(c, weather, land ? w * .36f : w * .5f, top * (land ? .83f : .78f), land ? 10 : 11, WHITE, Paint.Align.CENTER);
+        text(c, clock(), w - dp(126), top * (land ? .48f : .38f), 13, WHITE, Paint.Align.CENTER);
         menu.set(w - dp(112), dp(5), w - dp(7), top - dp(4));
         panel(c, menu, 0xFF252E37, dp(7));
         text(c, "MENU OSMAND", menu.centerX(), menu.centerY() + dp(4), 10, YELLOW, Paint.Align.CENTER);
