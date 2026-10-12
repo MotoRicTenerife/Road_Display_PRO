@@ -6,7 +6,7 @@ import android.graphics.Paint;
 import android.graphics.Path;
 import android.graphics.RectF;
 import android.graphics.Typeface;
-import android.location.Location;
+import net.osmand.Location;
 import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
