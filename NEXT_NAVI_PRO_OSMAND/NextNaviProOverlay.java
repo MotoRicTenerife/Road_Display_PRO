@@ -246,7 +246,7 @@ final class NextNaviProOverlay extends View {
     }
 
     private void drawDigit(Canvas c,float x,float b,float w,float h,char ch,int color) {
-        final boolean[][] map={{1,1,1,1,1,1,0},{0,1,1,0,0,0,0},{1,1,0,1,1,0,1},{1,1,1,1,0,0,1},{0,1,1,0,0,1,1},{1,0,1,1,0,1,1},{1,0,1,1,1,1,1},{1,1,1,0,0,0,0},{1,1,1,1,1,1,1},{1,1,1,1,0,1,1}};
+        final boolean[][] map={{true,true,true,true,true,true,false},{false,true,true,false,false,false,false},{true,true,false,true,true,false,true},{true,true,true,true,false,false,true},{false,true,true,false,false,true,true},{true,false,true,true,false,true,true},{true,false,true,true,true,true,true},{true,true,true,false,false,false,false},{true,true,true,true,true,true,true},{true,true,true,true,false,true,true}};
         int n=ch>='0'&&ch<='9'?ch-'0':0; float t=Math.max(dp(4),h*.10f), mid=b-h*.5f;
         RectF[] r={new RectF(x+t,b-h,x+w-t,b-h+t),new RectF(x+w-t,b-h+t,x+w,mid),new RectF(x+w-t,mid,x+w,b-t),new RectF(x+t,b-t,x+w-t,b),new RectF(x,mid,x+t,b-t),new RectF(x,b-h+t,x+t,mid),new RectF(x+t,mid-t*.5f,x+w-t,mid+t*.5f)};
         for(int i=0;i<7;i++) if(map[n][i]) { p.setColor(color); c.drawRoundRect(r[i],t*.25f,t*.25f,p); }
