@@ -7,6 +7,7 @@ import android.graphics.Path;
 import android.graphics.RectF;
 import android.graphics.Typeface;
 import android.location.Location;
+import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
@@ -32,8 +33,9 @@ final class NextNaviProOverlay extends View {
     private final OsmandApplication app;
     private final Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final RectF mapWindow = new RectF(), menu = new RectF(), back = new RectF();
-    private View nativeHud;
+    private View nativeHud, mapView;
     private FrameLayout container;
+    private FrameLayout.LayoutParams originalMapParams;
     private float density;
     private boolean nativeMode, disposed;
     private int speed = -1;
@@ -49,11 +51,12 @@ final class NextNaviProOverlay extends View {
     }
 
     void install() {
-        View map = activity.findViewById(R.id.map_view_with_layers);
-        if (map == null || !(map.getParent() instanceof FrameLayout)) {
+        mapView = activity.findViewById(R.id.map_view_with_layers);
+        if (mapView == null || !(mapView.getParent() instanceof FrameLayout)) {
             throw new IllegalStateException("OsmAnd map container not found; refusing to show a fake map");
         }
-        container = (FrameLayout) map.getParent();
+        container = (FrameLayout) mapView.getParent();
+        originalMapParams = new FrameLayout.LayoutParams((FrameLayout.LayoutParams) mapView.getLayoutParams());
         nativeHud = activity.findViewById(R.id.map_hud_container);
         if (nativeHud != null) nativeHud.setVisibility(View.GONE);
         container.addView(this, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
@@ -118,6 +121,7 @@ final class NextNaviProOverlay extends View {
         boolean land = w > h;
         float top = dp(land ? 38 : 50);
         if (nativeMode) {
+            restoreMapSize();
             back.set(w - dp(184), dp(8), w - dp(8), dp(54));
             panel(c, back, PANEL, dp(8));
             text(c, "TORNA A NEXT NAVI PRO", back.centerX(), back.centerY() + dp(5), 13, WHITE, Paint.Align.CENTER);
@@ -125,6 +129,7 @@ final class NextNaviProOverlay extends View {
         }
         if (land) mapWindow.set(w * .685f, h * .17f, w - dp(10), h * .84f);
         else mapWindow.set(w * .055f, h * .825f, w * .945f, h * .975f);
+        applyMapWindow();
 
         // Leave a transparent viewport for OsmAnd's real, live map; black out its other UI.
         int save = c.save();
@@ -163,6 +168,37 @@ final class NextNaviProOverlay extends View {
         p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(dp(2)); p.setColor(0xFF596570);
         c.drawRoundRect(mapWindow, dp(8), dp(8), p); p.setStyle(Paint.Style.FILL);
         if (speed < 0) text(c, "VELOCITÀ NON DISPONIBILE", speedX, speedY + dp(24), 10, MUTED, Paint.Align.CENTER);
+    }
+
+    private void applyMapWindow() {
+        if (nativeMode || mapView == null || mapWindow.isEmpty()) return;
+        ViewGroup.LayoutParams raw = mapView.getLayoutParams();
+        if (!(raw instanceof FrameLayout.LayoutParams)) return;
+        FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) raw;
+        int width = Math.max(1, Math.round(mapWindow.width()));
+        int height = Math.max(1, Math.round(mapWindow.height()));
+        int left = Math.round(mapWindow.left), top = Math.round(mapWindow.top);
+        if (lp.width == width && lp.height == height && lp.leftMargin == left && lp.topMargin == top) return;
+        lp.width = width;
+        lp.height = height;
+        lp.gravity = Gravity.TOP | Gravity.LEFT;
+        lp.leftMargin = left;
+        lp.topMargin = top;
+        lp.rightMargin = 0;
+        lp.bottomMargin = 0;
+        mapView.setLayoutParams(lp);
+    }
+
+    private void restoreMapSize() {
+        if (mapView != null && originalMapParams != null) {
+            ViewGroup.LayoutParams raw = mapView.getLayoutParams();
+            if (!(raw instanceof FrameLayout.LayoutParams)) return;
+            FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) raw;
+            if (lp.width != originalMapParams.width || lp.height != originalMapParams.height
+                    || lp.leftMargin != originalMapParams.leftMargin || lp.topMargin != originalMapParams.topMargin) {
+                mapView.setLayoutParams(new FrameLayout.LayoutParams(originalMapParams));
+            }
+        }
     }
 
     private void drawArrow(Canvas c, float x, float y, float s, String label) {
@@ -237,10 +273,10 @@ final class NextNaviProOverlay extends View {
         if(e.getAction()==MotionEvent.ACTION_DOWN) return nativeMode ? back.contains(x,y) : menu.contains(x,y);
         if(e.getAction()==MotionEvent.ACTION_UP) {
             if(nativeMode&&back.contains(x,y)){nativeMode=false;if(nativeHud!=null)nativeHud.setVisibility(View.GONE);invalidate();return true;}
-            if(!nativeMode&&menu.contains(x,y)){nativeMode=true;if(nativeHud!=null)nativeHud.setVisibility(View.VISIBLE);invalidate();return true;}
+            if(!nativeMode&&menu.contains(x,y)){nativeMode=true;restoreMapSize();if(nativeHud!=null)nativeHud.setVisibility(View.VISIBLE);invalidate();return true;}
         }
         return false;
     }
 
-    void dispose(){disposed=true;removeCallbacks(refresh);if(nativeHud!=null)nativeHud.setVisibility(View.VISIBLE);}
+    void dispose(){disposed=true;removeCallbacks(refresh);restoreMapSize();if(nativeHud!=null)nativeHud.setVisibility(View.VISIBLE);}
 }
