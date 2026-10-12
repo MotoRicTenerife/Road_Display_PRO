@@ -1,0 +1,10 @@
+plugins { id 'com.android.application' }
+
+android { namespace 'com.riccardo.roaddisplay'; compileSdk 35
+    defaultConfig { applicationId 'com.riccardo.roaddisplay'; minSdk 26; targetSdk 35; versionCode 539; versionName '3.41.9' }
+}
+
+dependencies {
+    implementation 'com.google.android.gms:play-services-location:21.4.0'
+    implementation 'org.maplibre.gl:android-sdk-opengl:13.6.1'
+}
