@@ -159,7 +159,7 @@ final class NextNaviProOverlay extends View {
         text(c, clock(), speedX, speedY - digitH * .94f, 20, WHITE, Paint.Align.CENTER);
         drawSpeed(c, speedX, speedY, digitH);
         if (!limit.isEmpty()) drawLimit(c, limitX, limitY, limitR, limit);
-        panel(c, mapWindow, 0xFF070B0F, dp(8));
+        // Do not fill the viewport: the transparent hole must show the live OsmAnd map.
         p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(dp(2)); p.setColor(0xFF596570);
         c.drawRoundRect(mapWindow, dp(8), dp(8), p); p.setStyle(Paint.Style.FILL);
         if (speed < 0) text(c, "VELOCITÀ NON DISPONIBILE", speedX, speedY + dp(24), 10, MUTED, Paint.Align.CENTER);
